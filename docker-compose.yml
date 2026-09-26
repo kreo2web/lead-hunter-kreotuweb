@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  lead-hunter:
+    build: .
+    container_name: lead-hunter-kreotuweb
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./server/data:/app/server/data
+    environment:
+      - PORT=5000
+      - NODE_ENV=production
