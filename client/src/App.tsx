@@ -14,6 +14,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { LoginModal } from './components/LoginModal';
 import { UsersManager } from './components/UsersManager';
 import { WhatsAppBotManager } from './components/WhatsAppBotManager';
+import { SetupWizardModal } from './components/SetupWizardModal';
 import { Settings } from './types';
 
 export const App: React.FC = () => {
@@ -29,6 +30,7 @@ export const App: React.FC = () => {
     }
   });
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isSetupNeeded, setIsSetupNeeded] = useState(false);
 
   // Active navigation tab
   const [currentTab, setCurrentTab] = useState<'landing' | 'leads' | 'templates' | 'whatsapp' | 'settings' | 'users'>(() =>
@@ -81,8 +83,20 @@ export const App: React.FC = () => {
   const [selectedLeadForEmail, setSelectedLeadForEmail] = useState<Lead | null>(null);
   const [selectedLeadForDetail, setSelectedLeadForDetail] = useState<Lead | null>(null);
 
-  // Verify session on mount
+  // Check setup status and verify session on mount
   useEffect(() => {
+    // Check if initial admin setup is required
+    fetch('/api/auth/setup-status')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.isConfigured === false) {
+          setIsSetupNeeded(true);
+        } else {
+          setIsSetupNeeded(false);
+        }
+      })
+      .catch(() => {});
+
     const token = localStorage.getItem('lead_hunter_token');
     if (token) {
       fetch('/api/auth/verify', {
@@ -244,6 +258,19 @@ export const App: React.FC = () => {
     setCurrentUser(user);
     setIsLoggedIn(true);
     setCurrentTab('leads');
+  };
+
+  const handleSetupSuccess = (token: string, user: AuthUser) => {
+    localStorage.setItem('lead_hunter_token', token);
+    localStorage.setItem('lead_hunter_user', JSON.stringify(user));
+    setAuthToken(token);
+    setCurrentUser(user);
+    setIsLoggedIn(true);
+    setIsSetupNeeded(false);
+    setCurrentTab('leads');
+    fetchLeads();
+    fetchStats();
+    fetchTemplates();
   };
 
   const handleLogout = () => {
@@ -570,6 +597,13 @@ export const App: React.FC = () => {
         onClose={() => setIsLoginModalOpen(false)}
         onLoginSuccess={handleLoginSuccess}
       />
+
+      {/* Initial Setup Wizard Modal (Only shown on first-ever run if no admin exists) */}
+      {isSetupNeeded && (
+        <SetupWizardModal
+          onSetupSuccess={handleSetupSuccess}
+        />
+      )}
     </div>
   );
 };

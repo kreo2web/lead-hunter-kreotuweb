@@ -366,24 +366,15 @@ export async function initDatabase() {
     console.warn('Notice verifying leads table constraint:', err.message);
   }
 
-  // ─── SEED DEFAULT ADMIN USER ─────────────────────────────────────────────────
-  const adminExists = await get('SELECT id FROM users WHERE role = ?', ['admin']);
-  if (!adminExists) {
-    const oldUser = (await get('SELECT value FROM settings WHERE key = ?', ['admin_user']))?.value || 'admin';
-    const oldPass = (await get('SELECT value FROM settings WHERE key = ?', ['admin_pass']))?.value || 'admin123';
-    await run(
-      `INSERT INTO users (id, username, password, role, companyName, companyWebsite, senderName, createdAt)
-       VALUES (?, ?, ?, 'admin', ?, ?, ?, ?)`,
-      ['admin-001', oldUser, oldPass, 'Kreotuweb.com', 'https://kreotuweb.com', 'Equipo Kreotuweb', new Date().toISOString()]
-    );
-    console.log(`✅ Admin user created: ${oldUser} / ${oldPass}`);
+  // ─── ADMIN CHECK ─────────────────────────────────────────────────────────────
+  const adminExists = await get<{ id: string }>('SELECT id FROM users WHERE role = ? LIMIT 1', ['admin']);
+  if (adminExists) {
+    // Assign any unassigned templates to existing admin
+    await run("UPDATE templates SET userId = ? WHERE userId IS NULL", [adminExists.id]);
+    await seedTemplatesForUser(adminExists.id);
+  } else {
+    console.log('ℹ️ No hay administrador registrado. El sistema solicitará la configuración inicial en el primer acceso.');
   }
-
-  // Assign any unassigned templates to admin-001
-  await run("UPDATE templates SET userId = 'admin-001' WHERE userId IS NULL");
-
-  // Ensure admin has starter templates
-  await seedTemplatesForUser('admin-001');
 
   // Clean up any duplicate templates per user (keeping the earliest record)
   await run(`

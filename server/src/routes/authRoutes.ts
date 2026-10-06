@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { get, run } from '../db/database.js';
+import { get, run, seedTemplatesForUser } from '../db/database.js';
 
 const router = Router();
 
@@ -32,6 +32,72 @@ export function requireAdmin(req: any, res: Response, next: () => void) {
   }
   next();
 }
+
+// GET /api/auth/setup-status — checks if initial admin has been created
+router.get('/setup-status', async (_req: Request, res: Response) => {
+  try {
+    const admin = await get<{ id: string }>('SELECT id FROM users WHERE role = ? LIMIT 1', ['admin']);
+    res.json({ isConfigured: Boolean(admin) });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/auth/setup — one-time initial admin setup wizard
+router.post('/setup', async (req: Request, res: Response) => {
+  try {
+    // Security guard: verify if admin already exists
+    const existingAdmin = await get<{ id: string }>('SELECT id FROM users WHERE role = ? LIMIT 1', ['admin']);
+    if (existingAdmin) {
+      res.status(403).json({
+        error: 'El sistema ya ha sido configurado previamente. Por seguridad, no se puede volver a ejecutar la instalación.',
+      });
+      return;
+    }
+
+    const { username, password, companyName, companyWebsite, senderName } = req.body;
+    if (!username || !username.trim()) {
+      res.status(400).json({ error: 'El nombre de usuario del administrador es obligatorio.' });
+      return;
+    }
+    if (!password || password.trim().length < 6) {
+      res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres.' });
+      return;
+    }
+
+    const adminId = `admin_${Date.now()}`;
+    const cleanUser = username.trim();
+    const cleanPass = password.trim();
+    const compName = (companyName || '').trim() || 'Kreotuweb.com';
+    const compWeb = (companyWebsite || '').trim() || 'https://kreotuweb.com';
+    const sendName = (senderName || '').trim() || 'Equipo Kreotuweb';
+    const now = new Date().toISOString();
+
+    await run(
+      `INSERT INTO users (id, username, password, role, companyName, companyWebsite, senderName, createdAt)
+       VALUES (?, ?, ?, 'admin', ?, ?, ?, ?)`,
+      [adminId, cleanUser, cleanPass, compName, compWeb, sendName, now]
+    );
+
+    // Seed default outreach templates for this new admin
+    await seedTemplatesForUser(adminId);
+
+    // Auto-login: generate auth token
+    const token = `tkn_${Date.now()}_${Math.random().toString(36).substring(2, 14)}`;
+    validTokens.set(token, { userId: adminId, username: cleanUser, role: 'admin' });
+
+    console.log(`✅ Administrador configurado por primera vez: ${cleanUser}`);
+
+    res.json({
+      success: true,
+      token,
+      user: { userId: adminId, username: cleanUser, role: 'admin' },
+      message: '¡Administrador y sistema configurados exitosamente!',
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // POST /api/auth/login
 router.post('/login', async (req: Request, res: Response) => {
