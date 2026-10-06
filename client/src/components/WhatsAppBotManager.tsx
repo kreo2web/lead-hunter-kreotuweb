@@ -56,9 +56,12 @@ export const WhatsAppBotManager: React.FC<WhatsAppBotManagerProps> = ({
   // Form training state
   const [botEnabled, setBotEnabled] = useState(settings.wa_bot_enabled || false);
   const [botName, setBotName] = useState(settings.wa_bot_name || 'Asistente Virtual');
-  const [botProvider, setBotProvider] = useState<'gemini' | 'openai'>(settings.wa_bot_provider || 'gemini');
+  const [botProvider, setBotProvider] = useState<string>(settings.wa_bot_provider || 'gemini');
   const [geminiApiKey, setGeminiApiKey] = useState(settings.gemini_api_key || '');
   const [openaiApiKey, setOpenaiApiKey] = useState(settings.openai_api_key || '');
+  const [aiApiKey, setAiApiKey] = useState(settings.ai_api_key || '');
+  const [aiModelName, setAiModelName] = useState(settings.ai_model_name || '');
+  const [aiBaseUrl, setAiBaseUrl] = useState(settings.ai_base_url || '');
   const [botInstructions, setBotInstructions] = useState(settings.wa_bot_instructions || '');
 
   // FAQs state
@@ -84,6 +87,23 @@ export const WhatsAppBotManager: React.FC<WhatsAppBotManagerProps> = ({
   const [testMessage, setTestMessage] = useState('');
   const [testReply, setTestReply] = useState('');
   const [isTestingAi, setIsTestingAi] = useState(false);
+
+  useEffect(() => {
+    if (settings.wa_bot_enabled !== undefined) setBotEnabled(settings.wa_bot_enabled);
+    if (settings.wa_bot_name) setBotName(settings.wa_bot_name);
+    if (settings.wa_bot_provider) setBotProvider(settings.wa_bot_provider);
+    if (settings.gemini_api_key !== undefined) setGeminiApiKey(settings.gemini_api_key);
+    if (settings.openai_api_key !== undefined) setOpenaiApiKey(settings.openai_api_key);
+    if (settings.ai_api_key !== undefined) setAiApiKey(settings.ai_api_key);
+    if (settings.ai_model_name !== undefined) setAiModelName(settings.ai_model_name);
+    if (settings.ai_base_url !== undefined) setAiBaseUrl(settings.ai_base_url);
+    if (settings.wa_bot_instructions !== undefined) setBotInstructions(settings.wa_bot_instructions);
+    if (settings.wa_bot_faq_json) {
+      try {
+        setFaqs(JSON.parse(settings.wa_bot_faq_json));
+      } catch {}
+    }
+  }, [settings]);
 
   // Chats list state
   const [chats, setChats] = useState<WaChat[]>([]);
@@ -195,6 +215,9 @@ export const WhatsAppBotManager: React.FC<WhatsAppBotManagerProps> = ({
         wa_bot_provider: botProvider,
         gemini_api_key: geminiApiKey.trim(),
         openai_api_key: openaiApiKey.trim(),
+        ai_api_key: aiApiKey.trim(),
+        ai_model_name: aiModelName.trim(),
+        ai_base_url: aiBaseUrl.trim(),
         wa_bot_instructions: botInstructions.trim(),
         wa_bot_faq_json: JSON.stringify(faqs),
       });
@@ -213,6 +236,13 @@ export const WhatsAppBotManager: React.FC<WhatsAppBotManagerProps> = ({
     setIsTestingAi(true);
     setTestReply('');
 
+    const effectiveApiKey =
+      botProvider === 'gemini'
+        ? (geminiApiKey || aiApiKey)
+        : botProvider === 'openai'
+        ? (openaiApiKey || aiApiKey)
+        : aiApiKey;
+
     try {
       const res = await fetch('/api/whatsapp/test-ai', {
         method: 'POST',
@@ -226,6 +256,9 @@ export const WhatsAppBotManager: React.FC<WhatsAppBotManagerProps> = ({
           faqs,
           botName,
           provider: botProvider,
+          apiKey: effectiveApiKey,
+          modelName: aiModelName.trim(),
+          baseUrl: aiBaseUrl.trim(),
           geminiApiKey,
           openaiApiKey,
         }),
@@ -507,23 +540,29 @@ export const WhatsAppBotManager: React.FC<WhatsAppBotManagerProps> = ({
                   </label>
                   <select
                     value={botProvider}
-                    onChange={(e) => setBotProvider(e.target.value as any)}
+                    onChange={(e) => setBotProvider(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                   >
-                    <option value="gemini">Google Gemini (Flash - Recomendado)</option>
+                    <option value="gemini">Google Gemini (Flash - Rápido y Gratis)</option>
+                    <option value="groq">Groq Cloud (Llama 3.3 70B - ¡100% Gratis y Ultra Rápido!)</option>
+                    <option value="openrouter">OpenRouter (Modelos Free como DeepSeek R1 & Llama 3)</option>
+                    <option value="grok">xAI Grok (Grok 2 / Grok Beta)</option>
+                    <option value="deepseek">DeepSeek (V3 / R1 - Económico y Capaz)</option>
                     <option value="openai">OpenAI (GPT-4o mini)</option>
+                    <option value="custom">Personalizado / Ollama / Endpoint Local OpenAI</option>
                   </select>
                 </div>
               </div>
 
-              {/* API Keys */}
-              <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+              {/* API Keys & Model Parameters */}
+              <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
                   <Key className="w-4 h-4 text-emerald-600" />
-                  <span>Credenciales del Motor de IA</span>
+                  <span>Configuración del Proveedor ({botProvider.toUpperCase()})</span>
                 </div>
 
-                {botProvider === 'gemini' ? (
+                {/* API Key Field */}
+                {botProvider === 'gemini' && (
                   <div>
                     <label className="block text-[11px] font-medium text-slate-600 mb-1">
                       Google Gemini API Key:
@@ -547,7 +586,113 @@ export const WhatsAppBotManager: React.FC<WhatsAppBotManagerProps> = ({
                       </a>.
                     </p>
                   </div>
-                ) : (
+                )}
+
+                {botProvider === 'groq' && (
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                      Groq Cloud API Key (Gratis):
+                    </label>
+                    <input
+                      type="password"
+                      value={aiApiKey}
+                      onChange={(e) => setAiApiKey(e.target.value)}
+                      placeholder="gsk_..."
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Consigue tu API Key gratuita (sin tarjeta) en{' '}
+                      <a
+                        href="https://console.groq.com/keys"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-emerald-600 hover:underline font-semibold"
+                      >
+                        Groq Console
+                      </a>. Ofrece respuestas casi instantáneas con Llama 3.3.
+                    </p>
+                  </div>
+                )}
+
+                {botProvider === 'openrouter' && (
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                      OpenRouter API Key:
+                    </label>
+                    <input
+                      type="password"
+                      value={aiApiKey}
+                      onChange={(e) => setAiApiKey(e.target.value)}
+                      placeholder="sk-or-v1-..."
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Consigue tu clave en{' '}
+                      <a
+                        href="https://openrouter.ai/keys"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-emerald-600 hover:underline font-semibold"
+                      >
+                        OpenRouter
+                      </a>. Puedes usar modelos libres agregando el sufijo <code className="bg-slate-200 px-1 rounded text-slate-800 font-mono">:free</code>.
+                    </p>
+                  </div>
+                )}
+
+                {botProvider === 'grok' && (
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                      xAI Grok API Key:
+                    </label>
+                    <input
+                      type="password"
+                      value={aiApiKey}
+                      onChange={(e) => setAiApiKey(e.target.value)}
+                      placeholder="xai-..."
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Consigue tu clave de xAI en{' '}
+                      <a
+                        href="https://console.x.ai/"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-emerald-600 hover:underline font-semibold"
+                      >
+                        xAI Console
+                      </a>.
+                    </p>
+                  </div>
+                )}
+
+                {botProvider === 'deepseek' && (
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                      DeepSeek API Key:
+                    </label>
+                    <input
+                      type="password"
+                      value={aiApiKey}
+                      onChange={(e) => setAiApiKey(e.target.value)}
+                      placeholder="sk-..."
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Consigue tu clave de DeepSeek en{' '}
+                      <a
+                        href="https://platform.deepseek.com/api_keys"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-emerald-600 hover:underline font-semibold"
+                      >
+                        DeepSeek Platform
+                      </a>.
+                    </p>
+                  </div>
+                )}
+
+                {botProvider === 'openai' && (
                   <div>
                     <label className="block text-[11px] font-medium text-slate-600 mb-1">
                       OpenAI API Key:
@@ -559,8 +704,83 @@ export const WhatsAppBotManager: React.FC<WhatsAppBotManagerProps> = ({
                       placeholder="sk-..."
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                     />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Consigue tu clave en{' '}
+                      <a
+                        href="https://platform.openai.com/api-keys"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-emerald-600 hover:underline font-semibold"
+                      >
+                        OpenAI Platform
+                      </a>.
+                    </p>
                   </div>
                 )}
+
+                {botProvider === 'custom' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                        URL Base de la API (Endpoint OpenAI Compatible):
+                      </label>
+                      <input
+                        type="text"
+                        value={aiBaseUrl}
+                        onChange={(e) => setAiBaseUrl(e.target.value)}
+                        placeholder="http://localhost:11434/v1"
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      />
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        Ejemplo para Ollama: <code className="bg-slate-200 px-1 rounded text-slate-800 font-mono">http://localhost:11434/v1</code> o tu servidor proxy.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                        API Key / Bearer Token (Opcional si es local):
+                      </label>
+                      <input
+                        type="password"
+                        value={aiApiKey}
+                        onChange={(e) => setAiApiKey(e.target.value)}
+                        placeholder="sk-..."
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Optional Model Override */}
+                <div className="pt-2 border-t border-slate-200">
+                  <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                    Modelo Específico (Opcional):
+                  </label>
+                  <input
+                    type="text"
+                    value={aiModelName}
+                    onChange={(e) => setAiModelName(e.target.value)}
+                    placeholder={
+                      botProvider === 'gemini'
+                        ? 'gemini-1.5-flash (por defecto)'
+                        : botProvider === 'groq'
+                        ? 'llama-3.3-70b-versatile (por defecto)'
+                        : botProvider === 'openrouter'
+                        ? 'meta-llama/llama-3.3-70b-instruct:free (por defecto)'
+                        : botProvider === 'grok'
+                        ? 'grok-2-latest (por defecto)'
+                        : botProvider === 'deepseek'
+                        ? 'deepseek-chat (por defecto)'
+                        : botProvider === 'openai'
+                        ? 'gpt-4o-mini (por defecto)'
+                        : 'llama3.3 (o el modelo cargado en tu endpoint)'
+                    }
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Deja vacío para usar el modelo recomendado, o ingresa el ID del modelo que prefieras.
+                  </p>
+                </div>
               </div>
 
               {/* Business Description & Instructions */}

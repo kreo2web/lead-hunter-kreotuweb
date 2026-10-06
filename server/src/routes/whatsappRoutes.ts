@@ -61,7 +61,7 @@ router.post('/test-ai', async (req: Request, res: Response) => {
       return;
     }
 
-    const { message, instructions, faqs, botName, provider, geminiApiKey, openaiApiKey } = req.body;
+    const { message, instructions, faqs, botName, provider, apiKey, modelName, baseUrl, geminiApiKey, openaiApiKey } = req.body;
     if (!message || !message.trim()) {
       res.status(400).json({ error: 'El mensaje de prueba es obligatorio.' });
       return;
@@ -69,16 +69,20 @@ router.post('/test-ai', async (req: Request, res: Response) => {
 
     const user = await get<any>('SELECT * FROM users WHERE id = ?', [session.userId]);
     const finalProvider = provider || user?.waBotProvider || 'gemini';
-    const finalGeminiKey = geminiApiKey || user?.geminiApiKey;
-    const finalOpenAiKey = openaiApiKey || user?.openaiApiKey;
+    const finalApiKey = apiKey || user?.aiApiKey || (finalProvider === 'openai' ? (openaiApiKey || user?.openaiApiKey) : (geminiApiKey || user?.geminiApiKey));
+    const finalModelName = modelName || user?.aiModelName || undefined;
+    const finalBaseUrl = baseUrl || user?.aiBaseUrl || undefined;
 
     const reply = await generateAiReply(
       [],
       message.trim(),
       {
         provider: finalProvider,
-        geminiApiKey: finalGeminiKey,
-        openaiApiKey: finalOpenAiKey,
+        apiKey: finalApiKey,
+        modelName: finalModelName,
+        baseUrl: finalBaseUrl,
+        geminiApiKey: geminiApiKey || user?.geminiApiKey,
+        openaiApiKey: openaiApiKey || user?.openaiApiKey,
         botName: botName || user?.waBotName || 'Asistente Virtual',
         companyName: user?.companyName || 'Kreotuweb',
         companyWebsite: user?.companyWebsite || '',

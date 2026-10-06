@@ -5,8 +5,14 @@ export interface ChatMessage {
   content: string;
 }
 
+export type AiProvider = 'gemini' | 'openai' | 'grok' | 'groq' | 'openrouter' | 'deepseek' | 'custom' | string;
+
 export interface AiAgentConfig {
-  provider: 'gemini' | 'openai';
+  provider: AiProvider;
+  apiKey?: string;
+  modelName?: string;
+  baseUrl?: string;
+  // Legacy / specific fields
   geminiApiKey?: string;
   openaiApiKey?: string;
   botName: string;
@@ -20,6 +26,34 @@ export interface AiAgentConfig {
     category?: string;
   };
 }
+
+// Provider presets for OpenAI-compatible APIs
+const PROVIDER_PRESETS: Record<string, { baseUrl: string; defaultModel: string }> = {
+  grok: {
+    baseUrl: 'https://api.x.ai/v1',
+    defaultModel: 'grok-2-latest',
+  },
+  groq: {
+    baseUrl: 'https://api.groq.com/openai/v1',
+    defaultModel: 'llama-3.3-70b-versatile',
+  },
+  openrouter: {
+    baseUrl: 'https://openrouter.ai/api/v1',
+    defaultModel: 'meta-llama/llama-3.3-70b-instruct:free',
+  },
+  deepseek: {
+    baseUrl: 'https://api.deepseek.com',
+    defaultModel: 'deepseek-chat',
+  },
+  openai: {
+    baseUrl: 'https://api.openai.com/v1',
+    defaultModel: 'gpt-4o-mini',
+  },
+  custom: {
+    baseUrl: 'http://localhost:11434/v1',
+    defaultModel: 'llama3.3',
+  },
+};
 
 export async function generateAiReply(
   history: ChatMessage[],
@@ -52,27 +86,52 @@ REGLAS DE COMPORTAMIENTO EN WHATSAPP:
 5. Tu objetivo es ayudar al prospecto, resolver sus inquietudes y animarlo a dar el siguiente paso (por ejemplo agendar una llamada breve, pedir su correo electrónico o coordinar una propuesta).
 6. Responde SIEMPRE en español.`;
 
-  if (config.provider === 'openai' && config.openaiApiKey) {
-    return callOpenAi(systemPrompt, history, incomingMessage, config.openaiApiKey);
+  const provider = config.provider || 'gemini';
+
+  // 1. Google Gemini (Native API)
+  if (provider === 'gemini') {
+    const apiKey = config.apiKey || config.geminiApiKey || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('No se ha configurado la API Key de Google Gemini.');
+    }
+    const model = config.modelName?.trim() || 'gemini-1.5-flash';
+    return callGemini(systemPrompt, history, incomingMessage, apiKey, model);
   }
 
-  // Default: Google Gemini
-  const apiKey = config.geminiApiKey || process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('No se ha configurado la API Key de Google Gemini ni de OpenAI.');
+  // 2. Universal OpenAI-compatible Gateway (Grok, Groq, OpenRouter, DeepSeek, OpenAI, Custom/Ollama)
+  const preset = PROVIDER_PRESETS[provider] || PROVIDER_PRESETS.custom;
+  const baseUrl = config.baseUrl?.trim() || preset.baseUrl;
+  const modelName = config.modelName?.trim() || preset.defaultModel;
+
+  let apiKey = config.apiKey?.trim();
+  if (!apiKey && provider === 'openai') {
+    apiKey = config.openaiApiKey?.trim() || process.env.OPENAI_API_KEY;
   }
 
-  return callGemini(systemPrompt, history, incomingMessage, apiKey);
+  // For custom/local endpoints (like local Ollama), API key may be optional
+  if (!apiKey && provider !== 'custom') {
+    throw new Error(`No se ha configurado la API Key para el proveedor "${provider}".`);
+  }
+
+  return callOpenAiCompatible({
+    systemInstruction: systemPrompt,
+    history,
+    incomingMessage,
+    apiKey: apiKey || '',
+    baseUrl,
+    modelName,
+    provider,
+  });
 }
 
 async function callGemini(
   systemInstruction: string,
   history: ChatMessage[],
   incomingMessage: string,
-  apiKey: string
+  apiKey: string,
+  modelName: string = 'gemini-1.5-flash'
 ): Promise<string> {
-  // Use gemini-1.5-flash or gemini-2.5-flash
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey.trim()}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${apiKey.trim()}`;
 
   const contents: any[] = [];
 
@@ -101,7 +160,7 @@ async function callGemini(
 
   const res = await axios.post(url, payload, {
     headers: { 'Content-Type': 'application/json' },
-    timeout: 20000,
+    timeout: 25000,
   });
 
   const candidate = res.data?.candidates?.[0];
@@ -114,13 +173,20 @@ async function callGemini(
   return replyText.trim();
 }
 
-async function callOpenAi(
-  systemInstruction: string,
-  history: ChatMessage[],
-  incomingMessage: string,
-  apiKey: string
-): Promise<string> {
-  const url = 'https://api.openai.com/v1/chat/completions';
+async function callOpenAiCompatible(params: {
+  systemInstruction: string;
+  history: ChatMessage[];
+  incomingMessage: string;
+  apiKey: string;
+  baseUrl: string;
+  modelName: string;
+  provider: string;
+}): Promise<string> {
+  const { systemInstruction, history, incomingMessage, apiKey, baseUrl, modelName, provider } = params;
+
+  // Clean trailing slash
+  const cleanBase = baseUrl.replace(/\/+$/, '');
+  const url = cleanBase.endsWith('/chat/completions') ? cleanBase : `${cleanBase}/chat/completions`;
 
   const messages: any[] = [{ role: 'system', content: systemInstruction }];
 
@@ -136,26 +202,37 @@ async function callOpenAi(
     content: incomingMessage,
   });
 
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (apiKey) {
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  }
+
+  if (provider === 'openrouter') {
+    headers['HTTP-Referer'] = 'https://kreotuweb.com';
+    headers['X-Title'] = 'Lead Hunter Kreotuweb';
+  }
+
   const res = await axios.post(
     url,
     {
-      model: 'gpt-4o-mini',
+      model: modelName,
       messages,
       temperature: 0.7,
-      max_tokens: 500,
+      max_tokens: 600,
     },
     {
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey.trim()}`,
-      },
-      timeout: 20000,
+      headers,
+      timeout: 30000,
     }
   );
 
   const replyText = res.data?.choices?.[0]?.message?.content;
+
   if (!replyText) {
-    throw new Error('OpenAI no devolvió una respuesta válida.');
+    throw new Error(`La respuesta de ${provider} (${modelName}) no contiene texto válido.`);
   }
 
   return replyText.trim();

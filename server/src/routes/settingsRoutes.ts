@@ -11,8 +11,8 @@ router.get('/', requireAuth as any, async (req: any, res: Response) => {
     const user = await get<any>(
       `SELECT companyName, companyWebsite, senderName, smtpHost, smtpPort,
               smtpSecure, smtpUser, smtpPass, smtpFrom,
-              geminiApiKey, openaiApiKey, waBotEnabled, waBotName,
-              waBotInstructions, waBotFaqJson, waBotProvider,
+              geminiApiKey, openaiApiKey, aiApiKey, aiModelName, aiBaseUrl,
+              waBotEnabled, waBotName, waBotInstructions, waBotFaqJson, waBotProvider,
               socialFbCookie, socialIgCookie
        FROM users WHERE id = ?`,
       [req.user.userId]
@@ -31,6 +31,9 @@ router.get('/', requireAuth as any, async (req: any, res: Response) => {
       smtp_from: user.smtpFrom || '',
       gemini_api_key: user.geminiApiKey || '',
       openai_api_key: user.openaiApiKey || '',
+      ai_api_key: user.aiApiKey || '',
+      ai_model_name: user.aiModelName || '',
+      ai_base_url: user.aiBaseUrl || '',
       wa_bot_enabled: user.waBotEnabled === 1,
       wa_bot_name: user.waBotName || 'Asistente Virtual',
       wa_bot_instructions: user.waBotInstructions || '',
@@ -62,6 +65,7 @@ router.post('/', requireAuth as any, async (req: any, res: Response) => {
       smtp_host, smtp_port, smtp_secure,
       smtp_user, smtp_pass, smtp_from,
       gemini_api_key, openai_api_key,
+      ai_api_key, ai_model_name, ai_base_url,
       wa_bot_enabled, wa_bot_name, wa_bot_instructions,
       wa_bot_faq_json, wa_bot_provider,
       social_fb_cookie, social_ig_cookie,
@@ -83,6 +87,9 @@ router.post('/', requireAuth as any, async (req: any, res: Response) => {
     // New AI & Social fields
     if (gemini_api_key !== undefined) { fields.push('geminiApiKey = ?'); values.push(gemini_api_key); }
     if (openai_api_key !== undefined) { fields.push('openaiApiKey = ?'); values.push(openai_api_key); }
+    if (ai_api_key !== undefined) { fields.push('aiApiKey = ?'); values.push(ai_api_key); }
+    if (ai_model_name !== undefined) { fields.push('aiModelName = ?'); values.push(ai_model_name); }
+    if (ai_base_url !== undefined) { fields.push('aiBaseUrl = ?'); values.push(ai_base_url); }
     if (wa_bot_enabled !== undefined) { fields.push('waBotEnabled = ?'); values.push(wa_bot_enabled ? 1 : 0); }
     if (wa_bot_name !== undefined) { fields.push('waBotName = ?'); values.push(wa_bot_name); }
     if (wa_bot_instructions !== undefined) { fields.push('waBotInstructions = ?'); values.push(wa_bot_instructions); }

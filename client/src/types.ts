@@ -55,11 +55,14 @@ export interface Settings {
   // AI WhatsApp bot settings
   gemini_api_key?: string;
   openai_api_key?: string;
+  ai_api_key?: string;
+  ai_model_name?: string;
+  ai_base_url?: string;
   wa_bot_enabled?: boolean;
   wa_bot_name?: string;
   wa_bot_instructions?: string;
   wa_bot_faq_json?: string;
-  wa_bot_provider?: 'gemini' | 'openai';
+  wa_bot_provider?: 'gemini' | 'openai' | 'grok' | 'groq' | 'openrouter' | 'deepseek' | 'custom' | string;
   // Social media search settings
   social_fb_cookie?: string;
   social_ig_cookie?: string;

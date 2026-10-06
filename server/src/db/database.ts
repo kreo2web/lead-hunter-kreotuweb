@@ -282,6 +282,9 @@ export async function initDatabase() {
   const userColumns = [
     { name: 'geminiApiKey', type: "TEXT DEFAULT ''" },
     { name: 'openaiApiKey', type: "TEXT DEFAULT ''" },
+    { name: 'aiApiKey', type: "TEXT DEFAULT ''" },
+    { name: 'aiModelName', type: "TEXT DEFAULT ''" },
+    { name: 'aiBaseUrl', type: "TEXT DEFAULT ''" },
     { name: 'waBotEnabled', type: 'INTEGER DEFAULT 0' },
     { name: 'waBotName', type: "TEXT DEFAULT 'Asistente Virtual'" },
     { name: 'waBotInstructions', type: "TEXT DEFAULT ''" },

@@ -259,9 +259,12 @@ async function handleIncomingWaMessage(
     } catch {}
 
     // Generate AI response
-    console.log(`🤖 Generando respuesta de IA para prospecto ${lead?.name || cleanPh}...`);
+    console.log(`🤖 Generando respuesta de IA (${user.waBotProvider || 'gemini'}) para prospecto ${lead?.name || cleanPh}...`);
     const aiResponse = await generateAiReply(history, incomingText, {
       provider: user.waBotProvider || 'gemini',
+      apiKey: user.aiApiKey || (user.waBotProvider === 'openai' ? user.openaiApiKey : user.geminiApiKey),
+      modelName: user.aiModelName || undefined,
+      baseUrl: user.aiBaseUrl || undefined,
       geminiApiKey: user.geminiApiKey,
       openaiApiKey: user.openaiApiKey,
       botName: user.waBotName || 'Asistente Virtual',
