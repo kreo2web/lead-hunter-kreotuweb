@@ -66,6 +66,33 @@ export const DEFAULT_TEMPLATES = [
     isDefault: 1,
   },
   {
+    id: 'sms-alto-sinweb',
+    name: 'SMS - Sin Sitio Web (Prioridad Alta)',
+    type: 'SMS',
+    targetRanking: 'ALTO',
+    subject: '',
+    content: 'Hola {nombre_negocio}, vi su negocio en Google Maps en {ciudad}. En {mi_empresa} creamos páginas web modernas para captar clientes. ¿Le gustaría ver una propuesta sin compromiso? Más info: {mi_web}',
+    isDefault: 1,
+  },
+  {
+    id: 'sms-medio-webantigua',
+    name: 'SMS - Rediseño Web (Prioridad Media)',
+    type: 'SMS',
+    targetRanking: 'MEDIO',
+    subject: '',
+    content: 'Hola equipo de {nombre_negocio}, revisé su web ({sitio_web}) y podemos optimizarla para móviles y Google. En {mi_empresa} renovamos su presencia digital: {mi_web}',
+    isDefault: 1,
+  },
+  {
+    id: 'sms-bajo-seomkt',
+    name: 'SMS - SEO y Posicionamiento (Prioridad Baja)',
+    type: 'SMS',
+    targetRanking: 'BAJO',
+    subject: '',
+    content: 'Hola {nombre_negocio}, en {mi_empresa} ayudamos a negocios de {rubro} en {ciudad} a posicionarse en el Top 3 de Google y captar clientes. ¿Desea más info? {mi_web}',
+    isDefault: 1,
+  },
+  {
     id: 'email-alto-sinweb',
     name: 'Email HTML - Oportunidad: Página Web para {nombre_negocio}',
     type: 'EMAIL',
@@ -297,6 +324,21 @@ export async function initDatabase() {
   for (const col of userColumns) {
     try {
       await run(`ALTER TABLE users ADD COLUMN ${col.name} ${col.type}`);
+    } catch {
+      // Column likely already exists
+    }
+  }
+
+  // ─── LEADS COLUMNS MIGRATIONS (Multiple phones & sources) ───────────────────
+  const leadColumns = [
+    { name: 'phoneSource', type: "TEXT DEFAULT 'Google Maps'" },
+    { name: 'socialPhone', type: "TEXT DEFAULT ''" },
+    { name: 'phonesJson', type: "TEXT DEFAULT '[]'" },
+  ];
+
+  for (const col of leadColumns) {
+    try {
+      await run(`ALTER TABLE leads ADD COLUMN ${col.name} ${col.type}`);
     } catch {
       // Column likely already exists
     }

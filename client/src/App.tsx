@@ -7,6 +7,7 @@ import { SearchPanel } from './components/SearchPanel';
 import { FiltersBar } from './components/FiltersBar';
 import { LeadsTable } from './components/LeadsTable';
 import { WhatsAppModal } from './components/WhatsAppModal';
+import { SmsModal } from './components/SmsModal';
 import { EmailModal } from './components/EmailModal';
 import { LeadDetailModal } from './components/LeadDetailModal';
 import { TemplatesManager } from './components/TemplatesManager';
@@ -80,6 +81,7 @@ export const App: React.FC = () => {
 
   // Modals state
   const [selectedLeadForWA, setSelectedLeadForWA] = useState<Lead | null>(null);
+  const [selectedLeadForSms, setSelectedLeadForSms] = useState<Lead | null>(null);
   const [selectedLeadForEmail, setSelectedLeadForEmail] = useState<Lead | null>(null);
   const [selectedLeadForDetail, setSelectedLeadForDetail] = useState<Lead | null>(null);
 
@@ -512,6 +514,7 @@ export const App: React.FC = () => {
           <LeadsTable
             leads={filteredLeads}
             onOpenWhatsApp={(lead) => setSelectedLeadForWA(lead)}
+            onOpenSms={(lead) => setSelectedLeadForSms(lead)}
             onOpenEmail={(lead) => setSelectedLeadForEmail(lead)}
             onOpenDetail={(lead) => setSelectedLeadForDetail(lead)}
             onUpdateStatus={handleUpdateStatus}
@@ -565,6 +568,16 @@ export const App: React.FC = () => {
           templates={templates}
           onClose={() => setSelectedLeadForWA(null)}
           onSent={(id) => handleUpdateStatus(id, 'CONTACTADO_WA')}
+        />
+      )}
+
+      {/* SMS Modal (Windows Phone Link) */}
+      {selectedLeadForSms && (
+        <SmsModal
+          lead={selectedLeadForSms}
+          templates={templates}
+          onClose={() => setSelectedLeadForSms(null)}
+          onSent={(id) => handleUpdateStatus(id, 'CONTACTADO_SMS')}
         />
       )}
 

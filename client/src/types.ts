@@ -1,8 +1,18 @@
+export interface PhoneOption {
+  phone: string;
+  cleanPhone: string;
+  source: string;
+  isDefault?: boolean;
+}
+
 export interface Lead {
   id: string;
   name: string;
   phone: string | null;
   cleanPhone: string | null;
+  phoneSource?: string | null;
+  socialPhone?: string | null;
+  phonesJson?: string | null;
   website: string | null;
   address: string | null;
   city: string | null;
@@ -23,7 +33,7 @@ export interface Lead {
   websiteAuditNotes: string | null;
   rankingScore: number;
   rankingLevel: 'ALTO' | 'MEDIO' | 'BAJO';
-  status: 'NUEVO' | 'CONTACTADO_WA' | 'CONTACTADO_EMAIL' | 'INTERESADO' | 'DESCARTADO' | 'CERRADO';
+  status: 'NUEVO' | 'CONTACTADO_WA' | 'CONTACTADO_SMS' | 'CONTACTADO_EMAIL' | 'INTERESADO' | 'DESCARTADO' | 'CERRADO';
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -32,7 +42,7 @@ export interface Lead {
 export interface Template {
   id: string;
   name: string;
-  type: 'WHATSAPP' | 'EMAIL';
+  type: 'WHATSAPP' | 'EMAIL' | 'SMS';
   targetRanking: 'ALTO' | 'MEDIO' | 'BAJO' | 'TODOS';
   subject?: string;
   content: string;

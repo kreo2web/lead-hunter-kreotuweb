@@ -59,7 +59,7 @@ router.get('/stats', async (req: Request, res: Response) => {
     const bajo = (await get<{ count: number }>(`SELECT COUNT(*) as count FROM leads ${where} AND rankingLevel = 'BAJO'`, scope.params))?.count || 0;
     const withPhone = (await get<{ count: number }>(`SELECT COUNT(*) as count FROM leads ${where} AND phone IS NOT NULL AND phone != ''`, scope.params))?.count || 0;
     const withEmail = (await get<{ count: number }>(`SELECT COUNT(*) as count FROM leads ${where} AND email IS NOT NULL AND email != ''`, scope.params))?.count || 0;
-    const contacted = (await get<{ count: number }>(`SELECT COUNT(*) as count FROM leads ${where} AND status IN ('CONTACTADO_WA', 'CONTACTADO_EMAIL')`, scope.params))?.count || 0;
+    const contacted = (await get<{ count: number }>(`SELECT COUNT(*) as count FROM leads ${where} AND status IN ('CONTACTADO_WA', 'CONTACTADO_SMS', 'CONTACTADO_EMAIL')`, scope.params))?.count || 0;
 
     res.json({ total, alto, medio, bajo, withPhone, withEmail, contacted });
   } catch (err: any) {
@@ -168,7 +168,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const { status, notes } = req.body;
+    const { status, notes, phone, cleanPhone, phoneSource, socialPhone, phonesJson } = req.body;
     const updates: string[] = [];
     const params: any[] = [];
 
@@ -179,6 +179,26 @@ router.patch('/:id', async (req: Request, res: Response) => {
     if (notes !== undefined) {
       updates.push('notes = ?');
       params.push(notes);
+    }
+    if (phone !== undefined) {
+      updates.push('phone = ?');
+      params.push(phone);
+    }
+    if (cleanPhone !== undefined) {
+      updates.push('cleanPhone = ?');
+      params.push(cleanPhone);
+    }
+    if (phoneSource !== undefined) {
+      updates.push('phoneSource = ?');
+      params.push(phoneSource);
+    }
+    if (socialPhone !== undefined) {
+      updates.push('socialPhone = ?');
+      params.push(socialPhone);
+    }
+    if (phonesJson !== undefined) {
+      updates.push('phonesJson = ?');
+      params.push(typeof phonesJson === 'string' ? phonesJson : JSON.stringify(phonesJson));
     }
 
     if (updates.length === 0) {
@@ -299,9 +319,11 @@ router.post('/:id/enrich-social', async (req: Request, res: Response) => {
         name: lead.name,
         city: lead.city,
         phone: lead.phone,
+        cleanPhone: lead.cleanPhone,
         email: lead.email,
         socialFacebook: lead.socialFacebook,
         socialInstagram: lead.socialInstagram,
+        phonesJson: lead.phonesJson,
       },
       {
         socialFbCookie: userRow?.socialFbCookie || '',
@@ -310,11 +332,16 @@ router.post('/:id/enrich-social', async (req: Request, res: Response) => {
     );
 
     const now = new Date().toISOString();
+    const mergedPhonesJson = JSON.stringify(socialResult.discoveredPhones || []);
+
     await run(
       `UPDATE leads 
        SET email = COALESCE(?, email),
-           phone = COALESCE(?, phone),
-           cleanPhone = COALESCE(?, cleanPhone),
+           phone = COALESCE(phone, ?),
+           cleanPhone = COALESCE(cleanPhone, ?),
+           phoneSource = COALESCE(phoneSource, ?),
+           socialPhone = COALESCE(?, socialPhone),
+           phonesJson = ?,
            socialFacebook = COALESCE(?, socialFacebook),
            socialInstagram = COALESCE(?, socialInstagram),
            updatedAt = ?
@@ -323,6 +350,9 @@ router.post('/:id/enrich-social', async (req: Request, res: Response) => {
         socialResult.email,
         socialResult.phone,
         socialResult.cleanPhone,
+        socialResult.phoneSource,
+        socialResult.socialPhone,
+        mergedPhonesJson,
         socialResult.socialFacebook,
         socialResult.socialInstagram,
         now,

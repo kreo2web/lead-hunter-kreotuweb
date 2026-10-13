@@ -3,6 +3,7 @@ import { Lead } from '../types';
 import {
   MessageCircle,
   Mail,
+  Smartphone,
   ExternalLink,
   MapPin,
   Star,
@@ -15,11 +16,13 @@ import {
   Instagram,
   Facebook,
   Linkedin,
+  Phone,
 } from 'lucide-react';
 
 interface LeadsTableProps {
   leads: Lead[];
   onOpenWhatsApp: (lead: Lead) => void;
+  onOpenSms: (lead: Lead) => void;
   onOpenEmail: (lead: Lead) => void;
   onOpenDetail: (lead: Lead) => void;
   onUpdateStatus: (id: string, status: Lead['status']) => void;
@@ -29,6 +32,7 @@ interface LeadsTableProps {
 export const LeadsTable: React.FC<LeadsTableProps> = ({
   leads,
   onOpenWhatsApp,
+  onOpenSms,
   onOpenEmail,
   onOpenDetail,
   onUpdateStatus,
@@ -77,6 +81,8 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
     switch (status) {
       case 'CONTACTADO_WA':
         return 'bg-green-50 text-green-700 border-green-200';
+      case 'CONTACTADO_SMS':
+        return 'bg-indigo-50 text-indigo-700 border-indigo-200 font-semibold';
       case 'CONTACTADO_EMAIL':
         return 'bg-sky-50 text-sky-700 border-sky-200';
       case 'INTERESADO':
@@ -99,7 +105,7 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
               <th className="py-3.5 px-4">Prioridad / Ranking</th>
               <th className="py-3.5 px-4">Negocio & Categoría</th>
               <th className="py-3.5 px-4">Sitio Web & Diagnóstico</th>
-              <th className="py-3.5 px-4">Outreach (WhatsApp / Email)</th>
+              <th className="py-3.5 px-4">Outreach (WhatsApp / SMS / Email)</th>
               <th className="py-3.5 px-4">Ubicación</th>
               <th className="py-3.5 px-4">Estado</th>
               <th className="py-3.5 px-4 text-right">Acciones</th>
@@ -214,6 +220,21 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
                           <span>WhatsApp</span>
                         </button>
 
+                        {/* SMS Button (Windows Phone Link) */}
+                        <button
+                          onClick={() => onOpenSms(lead)}
+                          disabled={!hasPhone}
+                          title={hasPhone ? `Enviar SMS a ${lead.phone} vía Windows Phone Link` : 'Sin teléfono registrado'}
+                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                            hasPhone
+                              ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                          }`}
+                        >
+                          <Smartphone className="w-3.5 h-3.5" />
+                          <span>SMS</span>
+                        </button>
+
                         {/* Email Button */}
                         <button
                           onClick={() => onOpenEmail(lead)}
@@ -230,13 +251,36 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
                         </button>
                       </div>
 
-                      {/* Display extracted email or socials */}
-                      <div className="flex items-center gap-2 text-slate-400">
+                      {/* Display extracted email, phone indicator or socials */}
+                      <div className="flex items-center gap-2 text-slate-400 flex-wrap">
                         {lead.email && (
-                          <span className="text-[11px] text-slate-600 font-mono truncate max-w-[150px]">
+                          <span className="text-[11px] text-slate-600 font-mono truncate max-w-[140px]">
                             {lead.email}
                           </span>
                         )}
+                        {(() => {
+                          let count = 0;
+                          try {
+                            if (lead.phonesJson) {
+                              const p = JSON.parse(lead.phonesJson);
+                              if (Array.isArray(p)) count = p.length;
+                            }
+                          } catch {}
+                          if (count > 1) {
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => onOpenDetail(lead)}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 cursor-pointer"
+                                title="Ver todos los teléfonos detectados (Google Maps, Redes Sociales, etc.)"
+                              >
+                                <Phone className="w-2.5 h-2.5" />
+                                <span>{count} núms</span>
+                              </button>
+                            );
+                          }
+                          return null;
+                        })()}
                         <div className="flex items-center gap-1">
                           {lead.socialInstagram && (
                             <a
@@ -298,6 +342,7 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
                     >
                       <option value="NUEVO">Nuevo</option>
                       <option value="CONTACTADO_WA">Contactado WA</option>
+                      <option value="CONTACTADO_SMS">Contactado SMS</option>
                       <option value="CONTACTADO_EMAIL">Contactado Email</option>
                       <option value="INTERESADO">Interesado</option>
                       <option value="CERRADO">Cliente Cerrado</option>

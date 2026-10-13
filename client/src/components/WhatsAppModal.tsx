@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Lead, Template } from '../types';
+import { Lead, Template, PhoneOption } from '../types';
 import { X, MessageCircle, Send, Copy, Check, ExternalLink } from 'lucide-react';
+import { getLeadPhoneOptions } from '../utils/phoneUtils';
 
 interface WhatsAppModalProps {
   lead: Lead | null;
@@ -18,6 +19,18 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
   if (!lead) return null;
 
   const waTemplates = templates.filter((t) => t.type === 'WHATSAPP');
+  const phoneOptions = getLeadPhoneOptions(lead);
+
+  // Selected phone number
+  const [selectedPhone, setSelectedPhone] = useState<PhoneOption>(() => {
+    const defaultOption = phoneOptions.find((p) => p.isDefault);
+    return defaultOption || phoneOptions[0] || {
+      phone: lead.phone || '',
+      cleanPhone: lead.cleanPhone || '',
+      source: 'Principal',
+      isDefault: true,
+    };
+  });
 
   // Find best matching template according to ranking
   const getInitialTemplateId = () => {
@@ -36,8 +49,8 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
     if (!rawText) return '';
     return rawText
       .replace(/{nombre_negocio}/g, lead.name || '')
-      .replace(/{telefono}/g, lead.phone || '')
-      .replace(/{telefono_limpio}/g, lead.cleanPhone || '')
+      .replace(/{telefono}/g, selectedPhone.phone || lead.phone || '')
+      .replace(/{telefono_limpio}/g, selectedPhone.cleanPhone || lead.cleanPhone || '')
       .replace(/{sitio_web}/g, lead.website || 'No registrado')
       .replace(/{ciudad}/g, lead.city || 'su ciudad')
       .replace(/{direccion}/g, lead.address || '')
@@ -54,15 +67,16 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
     if (template) {
       setCustomMessage(renderMessage(template.content));
     }
-  }, [selectedTemplateId, lead]);
+  }, [selectedTemplateId, lead, selectedPhone]);
 
   const handleSend = () => {
-    if (!lead.cleanPhone) {
+    const targetClean = selectedPhone.cleanPhone || lead.cleanPhone;
+    if (!targetClean) {
       alert('Este prospecto no tiene un número de teléfono válido.');
       return;
     }
     const encoded = encodeURIComponent(customMessage);
-    const url = `https://wa.me/${lead.cleanPhone}?text=${encoded}`;
+    const url = `https://wa.me/${targetClean}?text=${encoded}`;
     window.open(url, '_blank');
     onSent(lead.id);
     onClose();
@@ -90,7 +104,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
             <div>
               <h3 className="text-base font-bold">Enviar WhatsApp a {lead.name}</h3>
               <p className="text-xs text-emerald-100">
-                Teléfono: <span className="font-mono font-semibold">{lead.phone || lead.cleanPhone}</span>
+                Destino: <span className="font-mono font-semibold">{selectedPhone.phone || selectedPhone.cleanPhone}</span> ({selectedPhone.source})
               </p>
             </div>
           </div>
@@ -104,6 +118,44 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-4 flex-1">
+          {/* Multiple Phone Selector */}
+          {phoneOptions.length > 1 && (
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-700">
+                  Seleccionar Número de WhatsApp ({phoneOptions.length} detectados):
+                </label>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {phoneOptions.map((opt, idx) => {
+                  const isSelected = selectedPhone.cleanPhone === opt.cleanPhone;
+                  return (
+                    <button
+                      key={`${opt.cleanPhone}_${idx}`}
+                      type="button"
+                      onClick={() => setSelectedPhone(opt)}
+                      className={`flex items-center justify-between p-2.5 rounded-xl border text-left text-xs transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-emerald-50 border-emerald-400 text-emerald-950 ring-2 ring-emerald-500/20'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div>
+                        <span className="font-semibold block">{opt.source}</span>
+                        <span className="font-mono text-slate-600">{opt.phone}</span>
+                      </div>
+                      {isSelected && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white">
+                          Seleccionado
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Template selector */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">

@@ -1,9 +1,13 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { calculateRanking, checkIsSocialUrl, AuditResult } from '../services/rankingService.js';
+import { cleanPhoneNumber } from './gmapsScraper.js';
+import { extractWhatsappLinks, extractPotentialPhones } from './socialEnricher.js';
 
 export interface EnrichedWebData extends AuditResult {
   email: string | null;
+  phone: string | null;
+  websitePhones: Array<{ phone: string; cleanPhone: string; source: string }>;
   socialFacebook: string | null;
   socialInstagram: string | null;
   socialLinkedin: string | null;
@@ -50,6 +54,8 @@ export async function enrichWebsite(url: string | null | undefined): Promise<Enr
     return {
       ...ranking,
       email: null,
+      phone: null,
+      websitePhones: [],
       socialFacebook: null,
       socialInstagram: null,
       socialLinkedin: null,
@@ -74,6 +80,8 @@ export async function enrichWebsite(url: string | null | undefined): Promise<Enr
     return {
       ...ranking,
       email: null,
+      phone: null,
+      websitePhones: [],
       socialFacebook: normalizedUrl.toLowerCase().includes('facebook.com') || normalizedUrl.toLowerCase().includes('fb.com') ? normalizedUrl : null,
       socialInstagram: normalizedUrl.toLowerCase().includes('instagram.com') ? normalizedUrl : null,
       socialLinkedin: normalizedUrl.toLowerCase().includes('linkedin.com') ? normalizedUrl : null,
@@ -88,6 +96,7 @@ export async function enrichWebsite(url: string | null | undefined): Promise<Enr
   const detectedIssues: string[] = [];
   const foundEmails = new Set<string>();
   const collectedLinks: string[] = [];
+  const websitePhones: Array<{ phone: string; cleanPhone: string; source: string }> = [];
 
   const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -140,16 +149,46 @@ export async function enrichWebsite(url: string | null | undefined): Promise<Enr
       if (cleaned) foundEmails.add(cleaned);
     }
 
-    // Collect all links for social networks
-    $('a[href]').each((_, el) => {
-      const href = $(el).attr('href');
-      if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
-        collectedLinks.push(href);
+    // Extract tel: links
+    $('a[href^="tel:"]').each((_, el) => {
+      const href = $(el).attr('href') || '';
+      const rawNum = href.replace(/^tel:/i, '').split('?')[0].trim();
+      const cl = cleanPhoneNumber(rawNum);
+      if (cl && !websitePhones.some(p => p.cleanPhone === cl)) {
+        websitePhones.push({ phone: rawNum, cleanPhone: cl, source: 'Sitio Web' });
       }
     });
 
+    // Extract wa.me / whatsapp links from page
+    $('a[href]').each((_, el) => {
+      const href = $(el).attr('href');
+      if (href) {
+        if (href.startsWith('http://') || href.startsWith('https://')) {
+          collectedLinks.push(href);
+        }
+        if (href.includes('wa.me') || href.includes('whatsapp.com')) {
+          const waList = extractWhatsappLinks(href);
+          for (const w of waList) {
+            const cl = cleanPhoneNumber(w);
+            if (cl && !websitePhones.some(p => p.cleanPhone === cl)) {
+              websitePhones.push({ phone: w, cleanPhone: cl, source: 'Sitio Web (WhatsApp)' });
+            }
+          }
+        }
+      }
+    });
+
+    // Extract potential phones from page text
+    const pagePhones = extractPotentialPhones(html);
+    for (const p of pagePhones) {
+      const cl = cleanPhoneNumber(p);
+      if (cl && !websitePhones.some(wp => wp.cleanPhone === cl)) {
+        websitePhones.push({ phone: p, cleanPhone: cl, source: 'Sitio Web' });
+      }
+    }
+
     // If no email found on homepage, try to inspect contact page link
-    if (foundEmails.size === 0) {
+    if (foundEmails.size === 0 || websitePhones.length === 0) {
       let contactHref: string | null = null;
       $('a[href]').each((_, el) => {
         const href = $(el).attr('href') || '';
@@ -174,10 +213,27 @@ export async function enrichWebsite(url: string | null | undefined): Promise<Enr
             if (cleaned) foundEmails.add(cleaned);
           });
 
+          contact$('a[href^="tel:"]').each((_, el) => {
+            const href = contact$(el).attr('href') || '';
+            const rawNum = href.replace(/^tel:/i, '').split('?')[0].trim();
+            const cl = cleanPhoneNumber(rawNum);
+            if (cl && !websitePhones.some(p => p.cleanPhone === cl)) {
+              websitePhones.push({ phone: rawNum, cleanPhone: cl, source: 'Sitio Web (Contacto)' });
+            }
+          });
+
           const cMatches = contactHtml.match(COMMON_EMAIL_REGEX) || [];
           for (const m of cMatches) {
             const cleaned = cleanEmail(m);
             if (cleaned) foundEmails.add(cleaned);
+          }
+
+          const cPhones = extractPotentialPhones(contactHtml);
+          for (const cp of cPhones) {
+            const cl = cleanPhoneNumber(cp);
+            if (cl && !websitePhones.some(wp => wp.cleanPhone === cl)) {
+              websitePhones.push({ phone: cp, cleanPhone: cl, source: 'Sitio Web (Contacto)' });
+            }
           }
         } catch {
           // Non-fatal
@@ -202,6 +258,8 @@ export async function enrichWebsite(url: string | null | undefined): Promise<Enr
   return {
     ...ranking,
     email: emailList[0] || null,
+    phone: websitePhones[0]?.phone || null,
+    websitePhones,
     socialFacebook: extractSocialUrl(collectedLinks, 'facebook.com'),
     socialInstagram: extractSocialUrl(collectedLinks, 'instagram.com'),
     socialLinkedin: extractSocialUrl(collectedLinks, 'linkedin.com'),

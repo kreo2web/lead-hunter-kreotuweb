@@ -170,6 +170,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
             <option value="ALL">Todos los Estados</option>
             <option value="NUEVO">Nuevo</option>
             <option value="CONTACTADO_WA">Contactado por WhatsApp</option>
+            <option value="CONTACTADO_SMS">Contactado por SMS</option>
             <option value="CONTACTADO_EMAIL">Contactado por Email</option>
             <option value="INTERESADO">Interesado</option>
             <option value="CERRADO">Cliente Cerrado</option>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lead } from '../types';
+import { Lead, PhoneOption } from '../types';
 import {
   X,
   ExternalLink,
@@ -16,7 +16,10 @@ import {
   Linkedin,
   Save,
   Check,
+  MessageCircle,
+  Smartphone,
 } from 'lucide-react';
+import { getLeadPhoneOptions } from '../utils/phoneUtils';
 
 interface LeadDetailModalProps {
   lead: Lead | null;
@@ -65,6 +68,33 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
       setIsEnrichingSocial(false);
     }
   };
+
+  const handleSelectPrimaryPhone = async (opt: PhoneOption) => {
+    try {
+      const token = localStorage.getItem('lead_hunter_token') || '';
+      const res = await fetch(`/api/leads/${lead.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          phone: opt.phone,
+          cleanPhone: opt.cleanPhone,
+          phoneSource: opt.source,
+        }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setLead(updated);
+        onLeadUpdated?.(updated);
+      }
+    } catch (err: any) {
+      alert(`Error al cambiar teléfono: ${err.message}`);
+    }
+  };
+
+  const phoneOptions = getLeadPhoneOptions(lead);
 
   const handleSave = () => {
     onSaveNotes(lead.id, notes);
@@ -129,16 +159,91 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
             </p>
           </div>
 
-          {/* Contact Details Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Phone */}
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase">Teléfono</span>
-              <div className="flex items-center gap-2 text-slate-800 font-medium">
-                <Phone className="w-4 h-4 text-green-600" />
-                <span>{lead.phone || 'No registrado'}</span>
-              </div>
+          {/* Multiple Phone Numbers Section */}
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                <Phone className="w-3.5 h-3.5 text-green-600" />
+                <span>Números Telefónicos Detectados ({phoneOptions.length})</span>
+              </span>
+              {phoneOptions.length > 1 && (
+                <span className="text-[11px] text-slate-500 font-medium">
+                  Selecciona cuál usar para WhatsApp / SMS
+                </span>
+              )}
             </div>
+
+            {phoneOptions.length > 0 ? (
+              <div className="space-y-2">
+                {phoneOptions.map((opt, idx) => {
+                  const isPrimary = lead.cleanPhone === opt.cleanPhone;
+                  return (
+                    <div
+                      key={`${opt.cleanPhone}_${idx}`}
+                      className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl border transition-all gap-2 ${
+                        isPrimary
+                          ? 'bg-emerald-50/70 border-emerald-300 ring-1 ring-emerald-500/20'
+                          : 'bg-white border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Phone className={`w-4 h-4 ${isPrimary ? 'text-emerald-600' : 'text-slate-400'}`} />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900 font-mono text-sm">{opt.phone}</span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                              {opt.source}
+                            </span>
+                            {isPrimary && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white">
+                                Principal
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                        {!isPrimary && (
+                          <button
+                            type="button"
+                            onClick={() => handleSelectPrimaryPhone(opt)}
+                            className="px-2.5 py-1 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
+                            title="Hacer este número el principal del prospecto"
+                          >
+                            Usar como principal
+                          </button>
+                        )}
+                        <a
+                          href={`https://wa.me/${opt.cleanPhone}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1 px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors cursor-pointer"
+                          title="Abrir chat en WhatsApp"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5 fill-current" />
+                          <span>WhatsApp</span>
+                        </a>
+                        <a
+                          href={`sms:${opt.cleanPhone}`}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors cursor-pointer"
+                          title="Abrir en Windows Phone Link (SMS)"
+                        >
+                          <Smartphone className="w-3.5 h-3.5" />
+                          <span>SMS</span>
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 italic">No hay teléfonos registrados para este negocio.</p>
+            )}
+          </div>
+
+          {/* Contact Details Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 
             {/* Email */}
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">

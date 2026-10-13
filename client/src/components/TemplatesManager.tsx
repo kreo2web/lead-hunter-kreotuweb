@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Template } from '../types';
-import { Plus, Trash2, Edit2, MessageCircle, Mail, Save, X, Eye, Code } from 'lucide-react';
+import { Plus, Trash2, Edit2, MessageCircle, Smartphone, Mail, Save, X, Eye, Code } from 'lucide-react';
 
 interface TemplatesManagerProps {
   templates: Template[];
@@ -12,7 +12,7 @@ export const TemplatesManager: React.FC<TemplatesManagerProps> = ({
   onRefreshTemplates,
 }) => {
   const [editingTemplate, setEditingTemplate] = useState<Partial<Template> | null>(null);
-  const [filterType, setFilterType] = useState<'ALL' | 'WHATSAPP' | 'EMAIL'>('ALL');
+  const [filterType, setFilterType] = useState<'ALL' | 'WHATSAPP' | 'SMS' | 'EMAIL'>('ALL');
   const [previewTab, setPreviewTab] = useState<'preview' | 'code'>('preview');
 
   const filtered = templates.filter((t) => (filterType === 'ALL' ? true : t.type === filterType));
@@ -69,6 +69,7 @@ export const TemplatesManager: React.FC<TemplatesManagerProps> = ({
           >
             <option value="ALL">Todas las plantillas</option>
             <option value="WHATSAPP">Solo WhatsApp</option>
+            <option value="SMS">Solo SMS (Phone Link)</option>
             <option value="EMAIL">Solo Email HTML</option>
           </select>
 
@@ -103,11 +104,17 @@ export const TemplatesManager: React.FC<TemplatesManagerProps> = ({
                 <div className="flex items-center gap-2">
                   <div
                     className={`p-2 rounded-xl ${
-                      t.type === 'WHATSAPP' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'
+                      t.type === 'WHATSAPP'
+                        ? 'bg-emerald-50 text-emerald-600'
+                        : t.type === 'SMS'
+                        ? 'bg-indigo-50 text-indigo-600'
+                        : 'bg-sky-50 text-sky-600'
                     }`}
                   >
                     {t.type === 'WHATSAPP' ? (
                       <MessageCircle className="w-4 h-4 fill-current" />
+                    ) : t.type === 'SMS' ? (
+                      <Smartphone className="w-4 h-4" />
                     ) : (
                       <Mail className="w-4 h-4" />
                     )}
@@ -115,7 +122,7 @@ export const TemplatesManager: React.FC<TemplatesManagerProps> = ({
                   <div>
                     <h4 className="font-bold text-slate-900 text-sm">{t.name}</h4>
                     <span className="text-[11px] font-semibold text-slate-400">
-                      Dirigido a Ranking: <strong className="text-slate-700">{t.targetRanking}</strong>
+                      Canal: <strong className="text-slate-700">{t.type}</strong> | Dirigido a Ranking: <strong className="text-slate-700">{t.targetRanking}</strong>
                     </span>
                   </div>
                 </div>
@@ -196,6 +203,7 @@ export const TemplatesManager: React.FC<TemplatesManagerProps> = ({
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   >
                     <option value="WHATSAPP">WhatsApp</option>
+                    <option value="SMS">SMS (Phone Link)</option>
                     <option value="EMAIL">Email HTML</option>
                   </select>
                 </div>
@@ -235,7 +243,7 @@ export const TemplatesManager: React.FC<TemplatesManagerProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Contenido ({editingTemplate.type === 'EMAIL' ? 'Código HTML' : 'Texto con Formato WhatsApp'})
+                  Contenido ({editingTemplate.type === 'EMAIL' ? 'Código HTML' : editingTemplate.type === 'SMS' ? 'Texto Plano SMS' : 'Texto con Formato WhatsApp'})
                 </label>
                 <textarea
                   rows={10}

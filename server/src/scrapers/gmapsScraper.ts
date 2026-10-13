@@ -187,40 +187,70 @@ export async function scrapeGoogleMaps(
 
         // Enrich with email, social media and website audit
         const enriched = await enrichWebsite(placeData.website);
+
+        // Build initial phones list from Maps and Website
+        const initialPhones: any[] = [];
+        if (placeData.phone && placeData.cleanPhone) {
+          initialPhones.push({
+            phone: placeData.phone,
+            cleanPhone: placeData.cleanPhone,
+            source: 'Google Maps',
+            isDefault: true,
+          });
+        }
+        if (enriched.websitePhones && Array.isArray(enriched.websitePhones)) {
+          for (const wp of enriched.websitePhones) {
+            if (!initialPhones.some(p => p.cleanPhone === wp.cleanPhone)) {
+              initialPhones.push(wp);
+            }
+          }
+        }
+
         let fullLead = {
           ...placeData,
           ...enriched,
+          phone: placeData.phone || (initialPhones[0]?.phone || null),
+          cleanPhone: placeData.cleanPhone || (initialPhones[0]?.cleanPhone || null),
+          phoneSource: placeData.phone ? 'Google Maps' : (initialPhones[0]?.source || null),
+          socialPhone: null as string | null,
+          phonesJson: JSON.stringify(initialPhones),
         };
 
-        // If email or phone is missing, try searching across social networks (Facebook, Instagram)
-        if (!fullLead.email || !fullLead.phone) {
-          try {
-            onProgress?.({
-              status: `Buscando contacto en redes sociales para: ${placeData.name}...`,
-              step: 'ENRICHING',
-              current: i + 1,
-              total: targetCount,
-            });
+        // Always search across social networks (Facebook, Instagram) to find profiles & active phone numbers
+        try {
+          onProgress?.({
+            status: `Buscando contacto en redes sociales para: ${placeData.name}...`,
+            step: 'ENRICHING',
+            current: i + 1,
+            total: targetCount,
+          });
 
-            const socialResult = await enrichLeadFromSocial({
-              name: fullLead.name,
-              city: fullLead.city,
-              phone: fullLead.phone,
-              email: fullLead.email,
-              socialFacebook: fullLead.socialFacebook,
-              socialInstagram: fullLead.socialInstagram,
-            });
+          const socialResult = await enrichLeadFromSocial({
+            name: fullLead.name,
+            city: fullLead.city,
+            phone: fullLead.phone,
+            cleanPhone: fullLead.cleanPhone,
+            email: fullLead.email,
+            socialFacebook: fullLead.socialFacebook,
+            socialInstagram: fullLead.socialInstagram,
+            phonesJson: fullLead.phonesJson,
+          });
 
-            if (socialResult.email) fullLead.email = socialResult.email;
-            if (socialResult.phone) {
+          if (socialResult.email) fullLead.email = socialResult.email;
+          if (socialResult.socialPhone) fullLead.socialPhone = socialResult.socialPhone;
+          if (socialResult.socialFacebook) fullLead.socialFacebook = socialResult.socialFacebook;
+          if (socialResult.socialInstagram) fullLead.socialInstagram = socialResult.socialInstagram;
+
+          if (socialResult.discoveredPhones && socialResult.discoveredPhones.length > 0) {
+            fullLead.phonesJson = JSON.stringify(socialResult.discoveredPhones);
+            if (!fullLead.phone) {
               fullLead.phone = socialResult.phone;
               fullLead.cleanPhone = socialResult.cleanPhone;
+              fullLead.phoneSource = socialResult.phoneSource;
             }
-            if (socialResult.socialFacebook) fullLead.socialFacebook = socialResult.socialFacebook;
-            if (socialResult.socialInstagram) fullLead.socialInstagram = socialResult.socialInstagram;
-          } catch (socialErr: any) {
-            console.warn(`Aviso: Error en enriquecimiento social de ${placeData.name}:`, socialErr.message);
           }
+        } catch (socialErr: any) {
+          console.warn(`Aviso: Error en enriquecimiento social de ${placeData.name}:`, socialErr.message);
         }
 
         results.push(fullLead);
