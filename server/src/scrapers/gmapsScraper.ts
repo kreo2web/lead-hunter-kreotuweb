@@ -371,3 +371,82 @@ async function extractPlaceDetails(page: Page, url: string): Promise<RawLead | n
     return null;
   }
 }
+
+/**
+ * Fast density inspection for multiple categories in a given city.
+ * Queries Google Maps in parallel/concurrency to count immediate places found.
+ */
+export async function probeCategoryDensity(
+  city: string,
+  categories: string[]
+): Promise<Array<{ category: string; estimatedCount: number; densityLevel: 'ALTA' | 'MEDIA' | 'BAJA' }>> {
+  let browser: Browser | null = null;
+  const results: Array<{ category: string; estimatedCount: number; densityLevel: 'ALTA' | 'MEDIA' | 'BAJA' }> = [];
+
+  try {
+    browser = await chromium.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-zygote',
+        '--lang=es-ES,es',
+      ],
+    });
+
+    const context = await browser.newContext({
+      viewport: { width: 1024, height: 768 },
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      locale: 'es-ES',
+    });
+
+    for (const cat of categories) {
+      const page = await context.newPage();
+      try {
+        const query = `${cat} en ${city}`;
+        const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(query)}?hl=es`;
+        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 12000 });
+
+        // Quick check for places count in feed
+        await page.waitForTimeout(1500);
+        const placeLinks = await page.locator('div[role="feed"] a[href*="/maps/place/"]').all();
+        let count = placeLinks.length;
+
+        // If single place view opened directly
+        const singleHeading = await page.locator('h1.DUwDvf').first().textContent().catch(() => null);
+        if (count === 0 && singleHeading) {
+          count = 1;
+        }
+
+        let densityLevel: 'ALTA' | 'MEDIA' | 'BAJA' = 'BAJA';
+        if (count >= 7) {
+          densityLevel = 'ALTA';
+        } else if (count >= 3) {
+          densityLevel = 'MEDIA';
+        }
+
+        results.push({
+          category: cat,
+          estimatedCount: count,
+          densityLevel,
+        });
+      } catch {
+        results.push({
+          category: cat,
+          estimatedCount: 0,
+          densityLevel: 'BAJA',
+        });
+      } finally {
+        await page.close().catch(() => {});
+      }
+    }
+  } catch (err: any) {
+    console.error('Error in probeCategoryDensity:', err.message);
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+  }
+
+  return results;
+}

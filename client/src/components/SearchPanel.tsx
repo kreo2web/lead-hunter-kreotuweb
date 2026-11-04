@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Loader2, MapPin, Briefcase, Zap, CheckCircle2 } from 'lucide-react';
+import { Search, Loader2, MapPin, Briefcase, Zap, Sparkles, TrendingUp, Check, ChevronRight, CheckCircle2, X } from 'lucide-react';
 
 interface SearchPanelProps {
   isSearching: boolean;
@@ -10,6 +10,14 @@ interface SearchPanelProps {
     current: number;
     total: number;
   };
+}
+
+interface NicheRecommendation {
+  category: string;
+  reason: string;
+  opportunityLevel: 'ALTA' | 'MEDIA' | 'BAJA';
+  suggestedSearch: string;
+  estimatedDensity: 'ALTA' | 'MEDIA' | 'BAJA';
 }
 
 const POPULAR_NICHES = [
@@ -32,6 +40,42 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
   const [niche, setNiche] = useState('');
   const [location, setLocation] = useState('');
   const [limit, setLimit] = useState(10);
+
+  // AI & Density recommendation states
+  const [isRecommending, setIsRecommending] = useState(false);
+  const [recommendations, setRecommendations] = useState<NicheRecommendation[]>([]);
+  const [showRecommendations, setShowRecommendations] = useState(false);
+  const [recommendationError, setRecommendationError] = useState<string | null>(null);
+
+  const handleFetchRecommendations = async () => {
+    if (!location.trim()) {
+      alert('Por favor ingresa primero la Ciudad o Zona para sondear la densidad y recomendarte rubros.');
+      return;
+    }
+
+    setIsRecommending(true);
+    setRecommendationError(null);
+    setShowRecommendations(true);
+
+    try {
+      const res = await fetch('/api/search/recommend-categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ city: location.trim() }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success && data.recommendations) {
+        setRecommendations(data.recommendations);
+      } else {
+        setRecommendationError(data.error || 'No se pudieron obtener recomendaciones');
+      }
+    } catch (err: any) {
+      setRecommendationError(err.message || 'Error de conexión');
+    } finally {
+      setIsRecommending(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,9 +123,30 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
           {/* Rubro */}
           <div className="sm:col-span-5 relative">
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              Rubro o Categoría de Negocio
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-600">
+                Rubro o Categoría de Negocio
+              </label>
+              <button
+                type="button"
+                onClick={handleFetchRecommendations}
+                disabled={isRecommending || isSearching}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+                title="Sondear densidad en Google Maps y recomendar rubros con IA"
+              >
+                {isRecommending ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin text-brand-600" />
+                    <span>Sondeando Maps...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3 h-3 text-brand-600" />
+                    <span>Sugerir con IA</span>
+                  </>
+                )}
+              </button>
+            </div>
             <div className="relative">
               <Briefcase className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
@@ -183,6 +248,89 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
             <span>Paso 2: Extraer teléfono y sitio web</span>
             <span>Paso 3: Analizar tecnología y extraer emails</span>
           </div>
+        </div>
+      )}
+
+      {/* AI & Density Recommendations Modal / Card */}
+      {showRecommendations && (
+        <div className="mt-5 p-5 bg-gradient-to-br from-brand-50/50 via-white to-slate-50 border border-brand-200 rounded-2xl shadow-xs animate-in fade-in duration-200">
+          <div className="flex items-start justify-between gap-4 mb-3">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-xl bg-brand-600 text-white shadow-sm">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Rubros Recomendados en {location || 'tu ciudad'}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Basado en sondeo de densidad real en Google Maps y análisis comercial de IA
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowRecommendations(false)}
+              className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {isRecommending ? (
+            <div className="py-8 flex flex-col items-center justify-center space-y-3 text-slate-500">
+              <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
+              <p className="text-xs font-semibold text-slate-700">Sondeando presencia comercial en Google Maps...</p>
+              <p className="text-[11px] text-slate-400">Analizando densidad y oportunidades para {location}</p>
+            </div>
+          ) : recommendationError ? (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700">
+              {recommendationError}
+            </div>
+          ) : recommendations.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-3">
+              {recommendations.map((item, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => {
+                    setNiche(item.category);
+                    setShowRecommendations(false);
+                  }}
+                  className="group p-3 bg-white hover:bg-brand-50/60 border border-slate-200 hover:border-brand-300 rounded-xl transition-all cursor-pointer shadow-2xs hover:shadow-sm flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-bold text-slate-900 group-hover:text-brand-700 transition-colors">
+                        {item.category}
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                          item.opportunityLevel === 'ALTA'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {item.opportunityLevel === 'ALTA' ? '🔥 Alta Op.' : '⭐ Oportunidad'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                      {item.reason}
+                    </p>
+                  </div>
+
+                  <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
+                    <span className="flex items-center gap-1">
+                      <TrendingUp className="w-3 h-3 text-slate-400" />
+                      Densidad: <strong className="text-slate-600">{item.estimatedDensity}</strong>
+                    </span>
+                    <span className="text-brand-600 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">
+                      Elegir <ChevronRight className="w-3 h-3" />
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       )}
 

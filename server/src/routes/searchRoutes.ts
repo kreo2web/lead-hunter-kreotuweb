@@ -1,10 +1,122 @@
 import { Router, Request, Response } from 'express';
-import { scrapeGoogleMaps } from '../scrapers/gmapsScraper.js';
-import { run, query } from '../db/database.js';
+import { scrapeGoogleMaps, probeCategoryDensity } from '../scrapers/gmapsScraper.js';
+import { run, query, get } from '../db/database.js';
 import { v4 as uuidv4 } from 'uuid';
 import { getUserFromReq } from './authRoutes.js';
+import { generateAiReply } from '../services/aiAgentService.js';
 
 const router = Router();
+
+const DEFAULT_CANDIDATE_NICHES = [
+  'Clínicas Dentales',
+  'Restaurantes',
+  'Talleres Mecánicos',
+  'Inmobiliarias',
+  'Ferreterías',
+  'Salones de Belleza',
+  'Gimnasios',
+  'Clínicas Veterinarias',
+  'Despachos Contables',
+  'Abogados',
+  'Tiendas de Ropa',
+  'Cafeterías',
+];
+
+/**
+ * POST /api/search/recommend-categories
+ * Probes Google Maps for density and then enriches suggestions with the user's AI Agent.
+ */
+router.post('/recommend-categories', async (req: Request, res: Response) => {
+  try {
+    const { city, country } = req.body;
+    if (!city || typeof city !== 'string' || !city.trim()) {
+      res.status(400).json({ error: 'La ciudad es requerida.' });
+      return;
+    }
+
+    const session = getUserFromReq(req);
+    const userId = session?.userId || null;
+    let user: any = null;
+    if (userId) {
+      user = await get<any>('SELECT * FROM users WHERE id = ?', [userId]);
+    }
+
+    const cleanCity = city.trim();
+    const cleanCountry = (country || '').trim();
+    const locationString = cleanCountry ? `${cleanCity}, ${cleanCountry}` : cleanCity;
+
+    // Step 1: Probe density on Google Maps for candidate niches (quick scan)
+    const probeCandidates = DEFAULT_CANDIDATE_NICHES.slice(0, 8); // Top 8 fast probes
+    const densityData = await probeCategoryDensity(locationString, probeCandidates);
+
+    // Step 2: Use configured AI (Gemini, Groq, etc.) to analyze findings and rank them
+    let aiPrompt = `Analiza la ciudad "${locationString}" y estos resultados preliminares de presencia comercial en Google Maps:\n\n`;
+    densityData.forEach((d) => {
+      aiPrompt += `- ${d.category}: Densidad detectada: ${d.densityLevel} (Muestra inicial: ~${d.estimatedCount} lugares).\n`;
+    });
+    aiPrompt += `\nGenera un JSON con una lista recomendada de 6 a 8 rubros ideales para prospección comercial B2B (venta de sitios web, marketing y presencia digital) en ${locationString}.`;
+    aiPrompt += `\nPara cada rubro incluye:
+- "category": nombre del rubro en español (ej. "Clínicas Dentales")
+- "reason": breve justificación comercial de por qué conviene venderles servicios web en esa ciudad (máximo 15 palabras)
+- "opportunityLevel": "ALTA", "MEDIA" o "BAJA"
+- "suggestedSearch": texto exacto sugerido para buscar en Google Maps (ej. "Clínicas Dentales en ${cleanCity}")
+- "estimatedDensity": "ALTA", "MEDIA" o "BAJA"
+
+Devuelve ÚNICAMENTE un array JSON válido sin texto adicional ni bloques markdown. Ejemplo: [{"category": "...", "reason": "...", "opportunityLevel": "ALTA", "suggestedSearch": "...", "estimatedDensity": "ALTA"}]`;
+
+    let recommendations: any[] = [];
+    try {
+      const provider = user?.waBotProvider || 'gemini';
+      const apiKey = user?.aiApiKey || (provider === 'openai' ? user?.openaiApiKey : user?.geminiApiKey) || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
+
+      if (apiKey) {
+        const rawAiReply = await generateAiReply([], aiPrompt, {
+          provider,
+          apiKey,
+          modelName: user?.aiModelName,
+          baseUrl: user?.aiBaseUrl,
+          botName: 'Consultor de Prospección',
+          companyName: user?.companyName || 'Lead Hunter',
+          companyWebsite: user?.companyWebsite || '',
+          instructions: 'Eres un analista de prospección B2B y prospección local para agencias de diseño web y marketing.',
+          faqs: [],
+        });
+
+        const jsonMatch = rawAiReply.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          recommendations = JSON.parse(jsonMatch[0]);
+        }
+      }
+    } catch (aiErr: any) {
+      console.warn('Error enriqueciendo con IA, utilizando análisis heurístico:', aiErr.message);
+    }
+
+    // Fallback: If AI is not configured or failed, formulate recommendations directly from densityData
+    if (!recommendations || recommendations.length === 0) {
+      recommendations = densityData.map((d) => ({
+        category: d.category,
+        reason: d.densityLevel === 'ALTA' 
+          ? 'Alta concentración de negocios locales con fuerte necesidad de digitalización.' 
+          : 'Nicho comercial con menor saturación y excelente oportunidad de cierre.',
+        opportunityLevel: d.densityLevel === 'ALTA' ? 'ALTA' : 'MEDIA',
+        suggestedSearch: `${d.category} en ${cleanCity}`,
+        estimatedDensity: d.densityLevel,
+      }));
+    }
+
+    res.json({
+      success: true,
+      city: cleanCity,
+      country: cleanCountry,
+      location: locationString,
+      densityProbed: densityData,
+      recommendations,
+    });
+  } catch (err: any) {
+    console.error('Error in /recommend-categories:', err.message);
+    res.status(500).json({ error: err.message || 'Error al obtener recomendaciones de categorías.' });
+  }
+});
 
 router.get('/stream', async (req: Request, res: Response) => {
   const searchQuery = (req.query.query as string) || '';
