@@ -73,6 +73,7 @@ export interface Settings {
   wa_bot_instructions?: string;
   wa_bot_faq_json?: string;
   wa_bot_provider?: 'gemini' | 'openai' | 'grok' | 'groq' | 'openrouter' | 'deepseek' | 'custom' | string;
+  wa_bot_excluded_phones?: string;
   // Social media search settings
   social_fb_cookie?: string;
   social_ig_cookie?: string;

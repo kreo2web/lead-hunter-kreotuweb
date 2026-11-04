@@ -319,6 +319,7 @@ export async function initDatabase() {
     { name: 'waBotProvider', type: "TEXT DEFAULT 'gemini'" },
     { name: 'socialFbCookie', type: "TEXT DEFAULT ''" },
     { name: 'socialIgCookie', type: "TEXT DEFAULT ''" },
+    { name: 'waBotExcludedPhones', type: "TEXT DEFAULT '[]'" },
   ];
 
   for (const col of userColumns) {

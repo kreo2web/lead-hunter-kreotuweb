@@ -20,6 +20,8 @@ import {
   PauseCircle,
   PlayCircle,
   User,
+  PhoneOff,
+  Users,
 } from 'lucide-react';
 import { Settings, WaChat } from '../types';
 
@@ -88,6 +90,19 @@ export const WhatsAppBotManager: React.FC<WhatsAppBotManagerProps> = ({
   const [testReply, setTestReply] = useState('');
   const [isTestingAi, setIsTestingAi] = useState(false);
 
+  // Excluded phones state (e.g., Familia, Amigos, Números Personales)
+  const [excludedPhones, setExcludedPhones] = useState<Array<{ phone: string; name: string; group: string }>>(() => {
+    try {
+      if (settings.wa_bot_excluded_phones) {
+        return JSON.parse(settings.wa_bot_excluded_phones);
+      }
+    } catch {}
+    return [];
+  });
+  const [newExcludedPhone, setNewExcludedPhone] = useState('');
+  const [newExcludedName, setNewExcludedName] = useState('');
+  const [newExcludedGroup, setNewExcludedGroup] = useState('Familia');
+
   useEffect(() => {
     if (settings.wa_bot_enabled !== undefined) setBotEnabled(settings.wa_bot_enabled);
     if (settings.wa_bot_name) setBotName(settings.wa_bot_name);
@@ -101,6 +116,11 @@ export const WhatsAppBotManager: React.FC<WhatsAppBotManagerProps> = ({
     if (settings.wa_bot_faq_json) {
       try {
         setFaqs(JSON.parse(settings.wa_bot_faq_json));
+      } catch {}
+    }
+    if (settings.wa_bot_excluded_phones) {
+      try {
+        setExcludedPhones(JSON.parse(settings.wa_bot_excluded_phones));
       } catch {}
     }
   }, [settings]);
@@ -220,6 +240,7 @@ export const WhatsAppBotManager: React.FC<WhatsAppBotManagerProps> = ({
         ai_base_url: aiBaseUrl.trim(),
         wa_bot_instructions: botInstructions.trim(),
         wa_bot_faq_json: JSON.stringify(faqs),
+        wa_bot_excluded_phones: JSON.stringify(excludedPhones),
       });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -290,6 +311,23 @@ export const WhatsAppBotManager: React.FC<WhatsAppBotManagerProps> = ({
     const updated = [...faqs];
     updated[index][field] = value;
     setFaqs(updated);
+  };
+
+  // Excluded phones management
+  const handleAddExcludedPhone = () => {
+    if (!newExcludedPhone.trim()) return;
+    const item = {
+      phone: newExcludedPhone.trim(),
+      name: newExcludedName.trim() || 'Sin nombre',
+      group: newExcludedGroup.trim() || 'Familia',
+    };
+    setExcludedPhones([...excludedPhones, item]);
+    setNewExcludedPhone('');
+    setNewExcludedName('');
+  };
+
+  const handleRemoveExcludedPhone = (index: number) => {
+    setExcludedPhones(excludedPhones.filter((_, i) => i !== index));
   };
 
   return (
@@ -851,6 +889,106 @@ export const WhatsAppBotManager: React.FC<WhatsAppBotManagerProps> = ({
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Excluded Phones & Groups (Familia, Amigos, etc.) */}
+              <div className="space-y-4 pt-2 border-t border-slate-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-rose-50 text-rose-600">
+                      <PhoneOff className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">Números y Grupos Excluidos de IA</h4>
+                      <p className="text-[11px] text-slate-500">
+                        El robot ignorará a estos contactos para que puedas chatear con ellos personalmente sin respuestas automáticas.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-bold px-2.5 py-1 bg-slate-100 text-slate-700 rounded-full">
+                    {excludedPhones.length} {excludedPhones.length === 1 ? 'número' : 'números'}
+                  </span>
+                </div>
+
+                {/* Add new excluded phone inputs */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <div className="sm:col-span-4">
+                    <input
+                      type="text"
+                      value={newExcludedPhone}
+                      onChange={(e) => setNewExcludedPhone(e.target.value)}
+                      placeholder="Teléfono (ej: +52 55 1234 5678)"
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div className="sm:col-span-4">
+                    <input
+                      type="text"
+                      value={newExcludedName}
+                      onChange={(e) => setNewExcludedName(e.target.value)}
+                      placeholder="Nombre (ej: Mamá, Juan, Hermano)"
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div className="sm:col-span-3">
+                    <select
+                      value={newExcludedGroup}
+                      onChange={(e) => setNewExcludedGroup(e.target.value)}
+                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-emerald-500"
+                    >
+                      <option value="Familia">👨‍👩‍👧 Familia</option>
+                      <option value="Amigos">🤝 Amigos</option>
+                      <option value="Personal">🔒 Personal</option>
+                      <option value="Equipo / Trabajo">💼 Equipo / Trabajo</option>
+                      <option value="Clientes VIP">⭐ Clientes VIP</option>
+                    </select>
+                  </div>
+                  <div className="sm:col-span-1 flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={handleAddExcludedPhone}
+                      disabled={!newExcludedPhone.trim()}
+                      className="w-full sm:w-auto p-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-lg transition-colors cursor-pointer flex items-center justify-center"
+                      title="Agregar número excluido"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Excluded numbers list */}
+                {excludedPhones.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
+                    {excludedPhones.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-2.5 bg-rose-50/50 border border-rose-100 rounded-xl"
+                      >
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-rose-200 text-rose-700 shrink-0">
+                            {item.group || 'Excluido'}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-slate-800 truncate">{item.name}</p>
+                            <p className="text-[11px] font-mono text-slate-500 truncate">{item.phone}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveExcludedPhone(idx)}
+                          className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-white transition-colors cursor-pointer shrink-0 ml-2"
+                          title="Eliminar de la lista de exclusión"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic bg-slate-50 p-3 rounded-xl border border-dashed border-slate-200 text-center">
+                    No hay números excluidos actualmente. Cualquier chat entrante será atendido por el robot.
+                  </p>
+                )}
               </div>
 
               {/* Feedback and Submit Button */}

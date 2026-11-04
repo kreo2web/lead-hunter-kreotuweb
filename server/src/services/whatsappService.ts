@@ -283,6 +283,38 @@ async function handleIncomingWaMessage(
       return;
     }
 
+    // Check if phone belongs to an excluded list / group (ej: familia, amigos, números personales)
+    let excludedPhones: Array<{ phone: string; name?: string; group?: string }> = [];
+    try {
+      if (user.waBotExcludedPhones) {
+        excludedPhones = JSON.parse(user.waBotExcludedPhones);
+      }
+    } catch {}
+
+    const isExcluded = excludedPhones.some((item) => {
+      const p = cleanPhoneNumber(item.phone || '') || item.phone || '';
+      if (!p) return false;
+      const digitsOnlyItem = p.replace(/\D/g, '');
+      const digitsOnlyIncoming = cleanPh.replace(/\D/g, '');
+      if (digitsOnlyItem === digitsOnlyIncoming) return true;
+      if (digitsOnlyItem.length >= 8 && digitsOnlyIncoming.endsWith(digitsOnlyItem)) return true;
+      if (digitsOnlyIncoming.length >= 8 && digitsOnlyItem.endsWith(digitsOnlyIncoming)) return true;
+      return false;
+    });
+
+    if (isExcluded) {
+      const matched = excludedPhones.find((item) => {
+        const p = cleanPhoneNumber(item.phone || '') || item.phone || '';
+        const digitsOnlyItem = p.replace(/\D/g, '');
+        const digitsOnlyIncoming = cleanPh.replace(/\D/g, '');
+        return digitsOnlyItem === digitsOnlyIncoming ||
+               (digitsOnlyItem.length >= 8 && digitsOnlyIncoming.endsWith(digitsOnlyItem)) ||
+               (digitsOnlyIncoming.length >= 8 && digitsOnlyItem.endsWith(digitsOnlyIncoming));
+      });
+      console.log(`🚫 Teléfono ${cleanPh} omitido por regla de exclusión/grupo: "${matched?.group || 'Excluido'}" (${matched?.name || 'Sin nombre'}). No se responderá con IA.`);
+      return;
+    }
+
     // Build chat history for AI context
     const recentDbMessages = await query<any>(
       `SELECT sender, content FROM wa_messages 

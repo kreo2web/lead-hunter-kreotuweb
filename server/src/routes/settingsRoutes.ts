@@ -13,7 +13,7 @@ router.get('/', requireAuth as any, async (req: any, res: Response) => {
               smtpSecure, smtpUser, smtpPass, smtpFrom,
               geminiApiKey, openaiApiKey, aiApiKey, aiModelName, aiBaseUrl,
               waBotEnabled, waBotName, waBotInstructions, waBotFaqJson, waBotProvider,
-              socialFbCookie, socialIgCookie
+              socialFbCookie, socialIgCookie, waBotExcludedPhones
        FROM users WHERE id = ?`,
       [req.user.userId]
     );
@@ -41,6 +41,7 @@ router.get('/', requireAuth as any, async (req: any, res: Response) => {
       wa_bot_provider: user.waBotProvider || 'gemini',
       social_fb_cookie: user.socialFbCookie || '',
       social_ig_cookie: user.socialIgCookie || '',
+      wa_bot_excluded_phones: user.waBotExcludedPhones || '[]',
     };
 
     if (user.smtpPass) {
@@ -68,7 +69,7 @@ router.post('/', requireAuth as any, async (req: any, res: Response) => {
       ai_api_key, ai_model_name, ai_base_url,
       wa_bot_enabled, wa_bot_name, wa_bot_instructions,
       wa_bot_faq_json, wa_bot_provider,
-      social_fb_cookie, social_ig_cookie,
+      social_fb_cookie, social_ig_cookie, wa_bot_excluded_phones,
     } = req.body;
 
     const fields: string[] = [];
@@ -97,6 +98,7 @@ router.post('/', requireAuth as any, async (req: any, res: Response) => {
     if (wa_bot_provider !== undefined) { fields.push('waBotProvider = ?'); values.push(wa_bot_provider); }
     if (social_fb_cookie !== undefined) { fields.push('socialFbCookie = ?'); values.push(social_fb_cookie); }
     if (social_ig_cookie !== undefined) { fields.push('socialIgCookie = ?'); values.push(social_ig_cookie); }
+    if (wa_bot_excluded_phones !== undefined) { fields.push('waBotExcludedPhones = ?'); values.push(wa_bot_excluded_phones); }
 
     if (fields.length > 0) {
       values.push(req.user.userId);
