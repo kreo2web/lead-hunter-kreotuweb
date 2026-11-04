@@ -215,25 +215,56 @@ async function callOpenAiCompatible(params: {
     headers['X-Title'] = 'Lead Hunter Kreotuweb';
   }
 
-  const res = await axios.post(
-    url,
-    {
-      model: modelName,
-      messages,
-      temperature: 0.7,
-      max_tokens: 600,
-    },
-    {
-      headers,
-      timeout: 30000,
+  const maxRetries = 3;
+  let lastError: any = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await axios.post(
+        url,
+        {
+          model: modelName,
+          messages,
+          temperature: 0.7,
+          max_tokens: 600,
+        },
+        {
+          headers,
+          timeout: 30000,
+        }
+      );
+
+      const replyText = res.data?.choices?.[0]?.message?.content;
+
+      if (!replyText) {
+        throw new Error(`La respuesta de ${provider} (${modelName}) no contiene texto válido.`);
+      }
+
+      return replyText.trim();
+    } catch (err: any) {
+      lastError = err;
+      const status = err.response?.status;
+
+      // Manejar Rate Limit (429) o fallos temporales (500, 502, 503, 504) con reintentos
+      if ((status === 429 || status === 500 || status === 502 || status === 503 || status === 504) && attempt < maxRetries) {
+        const retryAfterHeader = err.response?.headers?.['retry-after'];
+        let waitMs = (attempt + 1) * 2000; // 2s, 4s, 6s
+
+        if (retryAfterHeader) {
+          const parsed = parseFloat(retryAfterHeader);
+          if (!isNaN(parsed)) {
+            waitMs = Math.ceil(parsed * 1000) + 500;
+          }
+        }
+
+        console.warn(`⚠️ [${provider}] Error HTTP ${status}. Reintentando solicitud (${attempt + 1}/${maxRetries}) tras esperar ${waitMs}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+        continue;
+      }
+
+      break;
     }
-  );
-
-  const replyText = res.data?.choices?.[0]?.message?.content;
-
-  if (!replyText) {
-    throw new Error(`La respuesta de ${provider} (${modelName}) no contiene texto válido.`);
   }
 
-  return replyText.trim();
+  throw lastError;
 }

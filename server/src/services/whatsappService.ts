@@ -25,6 +25,8 @@ interface UserWaState {
   userPhone: string | null;
   isConnecting: boolean;
   lastError: string | null;
+  reconnectAttempts: number;
+  reconnectTimer: NodeJS.Timeout | null;
 }
 
 const activeSessions = new Map<string, UserWaState>();
@@ -50,8 +52,16 @@ export async function connectWaForUser(userId: string): Promise<{ success: boole
       userPhone: null,
       isConnecting: false,
       lastError: null,
+      reconnectAttempts: 0,
+      reconnectTimer: null,
     };
     activeSessions.set(userId, state);
+  }
+
+  // Clear pending reconnect timer if any
+  if (state.reconnectTimer) {
+    clearTimeout(state.reconnectTimer);
+    state.reconnectTimer = null;
   }
 
   if (state.isConnected && state.socket) {
@@ -101,26 +111,55 @@ export async function connectWaForUser(userId: string): Promise<{ success: boole
         state!.isConnected = false;
         state!.isConnecting = false;
         const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+        const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+        const isRestartRequired = statusCode === DisconnectReason.restartRequired;
 
-        console.log(`Conexión WA cerrada para usuario ${userId}. Razón: ${statusCode}. Reconectar: ${shouldReconnect}`);
+        console.log(`Conexión WA cerrada para usuario ${userId}. Razón: ${statusCode} (Intento ${state!.reconnectAttempts}).`);
 
-        if (statusCode === DisconnectReason.loggedOut) {
+        if (state!.reconnectTimer) {
+          clearTimeout(state!.reconnectTimer);
+          state!.reconnectTimer = null;
+        }
+
+        if (isLoggedOut) {
           state!.qrDataUrl = null;
           state!.socket = null;
+          state!.reconnectAttempts = 0;
           try {
             fs.rmSync(userSessionPath, { recursive: true, force: true });
           } catch {}
-        } else if (shouldReconnect) {
-          // Automatic reconnect after 5s
-          setTimeout(() => {
-            connectWaForUser(userId).catch(() => {});
-          }, 5000);
+          console.log(`ℹ️ Sesión cerrada permanentemente para usuario ${userId}. Requiere nuevo escaneo QR.`);
+        } else {
+          // Si es 428 (Precondition Required) o 503 con demasiados reintentos seguidos
+          const MAX_RECONNECT_ATTEMPTS = 5;
+          if (state!.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+            console.warn(`⚠️ Límite de reconexiones alcanzado (${MAX_RECONNECT_ATTEMPTS}) para usuario ${userId}. Deteniendo bucle de reconexión para proteger la sesión.`);
+            state!.lastError = `Desconexión frecuente (código ${statusCode}). Por favor verifica que WhatsApp no esté abierto en otro cliente y vuelve a pulsar Conectar.`;
+            state!.socket = null;
+            return;
+          }
+
+          state!.reconnectAttempts++;
+          // Si WhatsApp pide reinicio inmediato (515 restartRequired), esperar 1s; en otros casos backoff incremental
+          const delayMs = isRestartRequired ? 1500 : Math.min(3000 * state!.reconnectAttempts, 15000);
+          console.log(`🔄 Programando reconexión WA en ${delayMs / 1000}s (intento ${state!.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+
+          state!.reconnectTimer = setTimeout(() => {
+            state!.reconnectTimer = null;
+            connectWaForUser(userId).catch((e) => {
+              console.error(`Error en intento de reconexión WA (${userId}):`, e.message);
+            });
+          }, delayMs);
         }
       } else if (connection === 'open') {
         state!.isConnected = true;
         state!.isConnecting = false;
         state!.qrDataUrl = null;
+        state!.reconnectAttempts = 0; // Reset counter on successful connection
+        if (state!.reconnectTimer) {
+          clearTimeout(state!.reconnectTimer);
+          state!.reconnectTimer = null;
+        }
         const jid = sock.user?.id || '';
         state!.userPhone = jid.split(':')[0] || jid.split('@')[0];
         console.log(`✅ WhatsApp conectado exitosamente para usuario ${userId}: ${state!.userPhone}`);
@@ -162,6 +201,10 @@ export async function connectWaForUser(userId: string): Promise<{ success: boole
 
 export async function disconnectWaForUser(userId: string): Promise<{ success: boolean; message: string }> {
   const state = activeSessions.get(userId);
+  if (state?.reconnectTimer) {
+    clearTimeout(state.reconnectTimer);
+    state.reconnectTimer = null;
+  }
   if (state?.socket) {
     try {
       await state.socket.logout();
@@ -175,6 +218,7 @@ export async function disconnectWaForUser(userId: string): Promise<{ success: bo
     state.isConnecting = false;
     state.qrDataUrl = null;
     state.socket = null;
+    state.reconnectAttempts = 0;
   }
 
   const userSessionPath = path.join(SESSIONS_DIR, userId);
