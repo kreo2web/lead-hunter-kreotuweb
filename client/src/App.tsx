@@ -480,6 +480,7 @@ export const App: React.FC = () => {
             isSearching={isSearching}
             onStartSearch={handleStartSearch}
             searchProgress={searchProgress}
+            searchQueriesList={searchQueriesList}
           />
 
           {/* Metrics & Ranking Summary Bar */}

@@ -10,6 +10,7 @@ interface SearchPanelProps {
     current: number;
     total: number;
   };
+  searchQueriesList?: string[];
 }
 
 interface NicheRecommendation {
@@ -36,6 +37,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
   isSearching,
   onStartSearch,
   searchProgress,
+  searchQueriesList = [],
 }) => {
   const [niche, setNiche] = useState('');
   const [location, setLocation] = useState('');
@@ -46,6 +48,30 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
   const [recommendations, setRecommendations] = useState<NicheRecommendation[]>([]);
   const [showRecommendations, setShowRecommendations] = useState(false);
   const [recommendationError, setRecommendationError] = useState<string | null>(null);
+  const [searchedCategories, setSearchedCategories] = useState<string[]>([]);
+
+  // Check if a category has been prospected already (either in this session or in existing database queries)
+  const isCategoryProspected = (cat: string) => {
+    const cleanCat = cat.trim().toLowerCase();
+    // 1. Checked in local session
+    if (searchedCategories.some(c => c.toLowerCase() === cleanCat)) return true;
+    // 2. Checked against historical search queries in database
+    return searchQueriesList.some(q => {
+      const qLower = q.toLowerCase();
+      return qLower.includes(cleanCat);
+    });
+  };
+
+  const handleSelectRecommendation = (item: NicheRecommendation, autoStart: boolean = false) => {
+    if (isSearching) return;
+    setNiche(item.category);
+    // Keep recommendations card open so user can continue picking other cards
+    if (autoStart && location.trim()) {
+      setSearchedCategories(prev => prev.includes(item.category) ? prev : [...prev, item.category]);
+      const fullQuery = `${item.category.trim()} en ${location.trim()}`;
+      onStartSearch(fullQuery, limit);
+    }
+  };
 
   const handleFetchRecommendations = async () => {
     if (!location.trim()) {
@@ -80,6 +106,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!niche.trim() || !location.trim()) return;
+    setSearchedCategories(prev => prev.includes(niche.trim()) ? prev : [...prev, niche.trim()]);
     const fullQuery = `${niche.trim()} en ${location.trim()}`;
     onStartSearch(fullQuery, limit);
   };
@@ -289,46 +316,76 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
             </div>
           ) : recommendations.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-3">
-              {recommendations.map((item, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => {
-                    setNiche(item.category);
-                    setShowRecommendations(false);
-                  }}
-                  className="group p-3 bg-white hover:bg-brand-50/60 border border-slate-200 hover:border-brand-300 rounded-xl transition-all cursor-pointer shadow-2xs hover:shadow-sm flex flex-col justify-between"
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-bold text-slate-900 group-hover:text-brand-700 transition-colors">
-                        {item.category}
-                      </span>
-                      <span
-                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                          item.opportunityLevel === 'ALTA'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {item.opportunityLevel === 'ALTA' ? '🔥 Alta Op.' : '⭐ Oportunidad'}
-                      </span>
+              {recommendations.map((item, idx) => {
+                const prospected = isCategoryProspected(item.category);
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => {
+                      if (prospected) return;
+                      handleSelectRecommendation(item, false);
+                    }}
+                    className={`group p-3 rounded-xl border transition-all flex flex-col justify-between ${
+                      prospected
+                        ? 'bg-slate-100/90 border-slate-200/80 opacity-60 cursor-not-allowed select-none'
+                        : 'bg-white hover:bg-brand-50/60 border-slate-200 hover:border-brand-300 cursor-pointer shadow-2xs hover:shadow-sm'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className={`text-xs font-bold transition-colors ${
+                          prospected ? 'text-slate-500 line-through' : 'text-slate-900 group-hover:text-brand-700'
+                        }`}>
+                          {item.category}
+                        </span>
+                        {prospected ? (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-200 text-slate-600 flex items-center gap-1">
+                            <Check className="w-3 h-3 text-slate-500" /> Ya buscado
+                          </span>
+                        ) : (
+                          <span
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                              item.opportunityLevel === 'ALTA'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {item.opportunityLevel === 'ALTA' ? '🔥 Alta Op.' : '⭐ Oportunidad'}
+                          </span>
+                        )}
+                      </div>
+                      <p className={`text-[11px] line-clamp-2 leading-relaxed ${prospected ? 'text-slate-400' : 'text-slate-500'}`}>
+                        {item.reason}
+                      </p>
                     </div>
-                    <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
-                      {item.reason}
-                    </p>
-                  </div>
 
-                  <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
-                    <span className="flex items-center gap-1">
-                      <TrendingUp className="w-3 h-3 text-slate-400" />
-                      Densidad: <strong className="text-slate-600">{item.estimatedDensity}</strong>
-                    </span>
-                    <span className="text-brand-600 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">
-                      Elegir <ChevronRight className="w-3 h-3" />
-                    </span>
+                    <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
+                      <span className="flex items-center gap-1">
+                        <TrendingUp className="w-3 h-3 text-slate-400" />
+                        Densidad: <strong className={prospected ? 'text-slate-500' : 'text-slate-600'}>{item.estimatedDensity}</strong>
+                      </span>
+                      {prospected ? (
+                        <span className="text-slate-400 font-semibold text-[10px]">
+                          Completado
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectRecommendation(item, true);
+                          }}
+                          disabled={isSearching}
+                          className="text-brand-600 hover:text-brand-700 font-bold group-hover:translate-x-0.5 transition-all flex items-center gap-0.5 cursor-pointer disabled:cursor-not-allowed"
+                          title="Buscar prospectos de este rubro directamente"
+                        >
+                          Buscar <ChevronRight className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : null}
         </div>
