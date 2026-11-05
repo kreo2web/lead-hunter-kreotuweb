@@ -34,6 +34,56 @@ export function cleanPhoneNumber(phone: string | null | undefined): string | nul
   return digitsOnly;
 }
 
+/**
+ * Normalizes a phone number for international WhatsApp comparison.
+ * Handles country prefixes and country-specific mobile digits (e.g. Mexico 52 1 ..., Argentina 54 9 ...).
+ */
+export function normalizeWaPhone(raw: string | null | undefined): string {
+  if (!raw) return '';
+  let digits = raw.replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+
+  // Mexico mobile numbers in WhatsApp are often formatted as 521XXXXXXXXXX (13 digits),
+  // whereas international contacts or local numbers might be 52XXXXXXXXXX (12 digits) or 10 digits.
+  if (digits.startsWith('521') && digits.length === 13) {
+    digits = '52' + digits.slice(3);
+  }
+
+  // Argentina mobile numbers in WhatsApp often have 549XXXXXXXXXX (12-13 digits)
+  if (digits.startsWith('549') && digits.length >= 12) {
+    digits = '54' + digits.slice(3);
+  }
+
+  return digits;
+}
+
+/**
+ * Checks whether two phone numbers represent the same phone / contact across different international formats.
+ */
+export function doPhonesMatch(phoneA: string | null | undefined, phoneB: string | null | undefined): boolean {
+  if (!phoneA || !phoneB) return false;
+  const normA = normalizeWaPhone(phoneA);
+  const normB = normalizeWaPhone(phoneB);
+  if (!normA || !normB) return false;
+
+  // Exact normalized match
+  if (normA === normB) return true;
+
+  // Suffix match for 10 digits (standard national mobile length for Mexico, Colombia, USA, Spain, etc.)
+  if (normA.length >= 10 && normB.length >= 10) {
+    if (normA.slice(-10) === normB.slice(-10)) return true;
+  }
+
+  // Suffix match for 8 or 9 digits (local number match)
+  const minLen = Math.min(normA.length, normB.length);
+  if (minLen >= 8) {
+    const compareDigits = Math.min(minLen, 9);
+    if (normA.slice(-compareDigits) === normB.slice(-compareDigits)) return true;
+  }
+
+  return false;
+}
+
 function stripMapIcons(text: string | null | undefined): string | null {
   if (!text) return null;
   // Remove Unicode Private Use Area characters commonly used as icons in Google Maps

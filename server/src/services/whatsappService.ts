@@ -11,7 +11,7 @@ import fs from 'fs';
 import QRCode from 'qrcode';
 import { get, query, run } from '../db/database.js';
 import { generateAiReply, ChatMessage } from './aiAgentService.js';
-import { cleanPhoneNumber } from '../scrapers/gmapsScraper.js';
+import { cleanPhoneNumber, doPhonesMatch, normalizeWaPhone } from '../scrapers/gmapsScraper.js';
 
 const SESSIONS_DIR = path.resolve(__dirname, '../../data/wa_sessions');
 if (!fs.existsSync(SESSIONS_DIR)) {
@@ -245,12 +245,19 @@ async function handleIncomingWaMessage(
     const user = await get<any>('SELECT * FROM users WHERE id = ?', [userId]);
     if (!user) return;
 
-    // Find if this phone matches any lead in user's leads
+    // Find if this phone matches any lead in user's leads (using normalized suffix & direct match)
+    const norm = normalizeWaPhone(cleanPh);
+    const suffix8 = norm.slice(-8);
     const lead = await get<any>(
       `SELECT * FROM leads 
-       WHERE userId = ? AND (cleanPhone = ? OR cleanPhone LIKE ? OR phone LIKE ?) 
+       WHERE userId = ? AND (
+         cleanPhone = ? 
+         OR cleanPhone = ?
+         OR cleanPhone LIKE ? 
+         OR phone LIKE ?
+       ) 
        ORDER BY createdAt DESC LIMIT 1`,
-      [userId, cleanPh, `%${cleanPh.slice(-8)}%`, `%${cleanPh.slice(-8)}%`]
+      [userId, cleanPh, norm, `%${suffix8}%`, `%${suffix8}%`]
     );
 
     // Upsert chat
@@ -283,7 +290,13 @@ async function handleIncomingWaMessage(
       return;
     }
 
-    // Check if phone belongs to an excluded list / group (ej: familia, amigos, números personales)
+    // 1. Check if the lead is explicitly marked as 'DESCARTADO' in the CRM leads table
+    if (lead && lead.status === 'DESCARTADO') {
+      console.log(`🚫 Teléfono ${cleanPh} (${lead.name}) tiene estado 'DESCARTADO' en la lista de prospectos. No se responderá con IA.`);
+      return;
+    }
+
+    // 2. Check if phone belongs to an excluded list / group (ej: familia, amigos, números personales)
     let excludedPhones: Array<{ phone: string; name?: string; group?: string }> = [];
     try {
       if (user.waBotExcludedPhones) {
@@ -291,27 +304,13 @@ async function handleIncomingWaMessage(
       }
     } catch {}
 
-    const isExcluded = excludedPhones.some((item) => {
-      const p = cleanPhoneNumber(item.phone || '') || item.phone || '';
-      if (!p) return false;
-      const digitsOnlyItem = p.replace(/\D/g, '');
-      const digitsOnlyIncoming = cleanPh.replace(/\D/g, '');
-      if (digitsOnlyItem === digitsOnlyIncoming) return true;
-      if (digitsOnlyItem.length >= 8 && digitsOnlyIncoming.endsWith(digitsOnlyItem)) return true;
-      if (digitsOnlyIncoming.length >= 8 && digitsOnlyItem.endsWith(digitsOnlyIncoming)) return true;
-      return false;
+    const matchedExcluded = excludedPhones.find((item) => {
+      // Direct comparison with incoming raw phone & cleaned phone
+      return doPhonesMatch(item.phone, rawPhone) || doPhonesMatch(item.phone, cleanPh);
     });
 
-    if (isExcluded) {
-      const matched = excludedPhones.find((item) => {
-        const p = cleanPhoneNumber(item.phone || '') || item.phone || '';
-        const digitsOnlyItem = p.replace(/\D/g, '');
-        const digitsOnlyIncoming = cleanPh.replace(/\D/g, '');
-        return digitsOnlyItem === digitsOnlyIncoming ||
-               (digitsOnlyItem.length >= 8 && digitsOnlyIncoming.endsWith(digitsOnlyItem)) ||
-               (digitsOnlyIncoming.length >= 8 && digitsOnlyItem.endsWith(digitsOnlyIncoming));
-      });
-      console.log(`🚫 Teléfono ${cleanPh} omitido por regla de exclusión/grupo: "${matched?.group || 'Excluido'}" (${matched?.name || 'Sin nombre'}). No se responderá con IA.`);
+    if (matchedExcluded) {
+      console.log(`🚫 Teléfono ${cleanPh} (raw: ${rawPhone}) omitido por regla de exclusión/grupo: "${matchedExcluded.group || 'Excluido'}" (${matchedExcluded.name || 'Sin nombre'}). No se responderá con IA.`);
       return;
     }
 

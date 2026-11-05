@@ -902,6 +902,9 @@ export const WhatsAppBotManager: React.FC<WhatsAppBotManagerProps> = ({
                       <h4 className="text-xs font-bold text-slate-900">Números y Grupos Excluidos de IA</h4>
                       <p className="text-[11px] text-slate-500">
                         El robot ignorará a estos contactos para que puedas chatear con ellos personalmente sin respuestas automáticas.
+                        <span className="block text-[10px] text-emerald-700 font-semibold mt-0.5">
+                          💡 Formato flexible: puedes escribir con código de país (ej. +52 55 1234 5678, +34 612..., +1 305...) o solo los números locales. El sistema detecta y normaliza automáticamente.
+                        </span>
                       </p>
                     </div>
                   </div>
