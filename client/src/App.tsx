@@ -293,6 +293,12 @@ export const App: React.FC = () => {
 
   // Live scraping with Server-Sent Events
   const handleStartSearch = (query: string, limit: number) => {
+    // Reset filters to ensure newly found leads are immediately visible in the table
+    setSearchQueryFilter('ALL');
+    setSearchTerm('');
+    setRankingFilter('ALL');
+    setStatusFilter('ALL');
+
     setIsSearching(true);
     setSearchProgress({
       status: `Iniciando rastreo de "${query}" en Google Maps...`,
@@ -347,10 +353,17 @@ export const App: React.FC = () => {
 
     eventSource.addEventListener('error', (e: any) => {
       console.error('EventSource error:', e);
+      let errorMsg = 'La búsqueda finalizó o fue interrumpida.';
+      if (e?.data) {
+        try {
+          const parsed = JSON.parse(e.data);
+          if (parsed.message) errorMsg = parsed.message;
+        } catch {}
+      }
       setIsSearching(false);
       setSearchProgress((prev) => ({
         ...prev,
-        status: 'La búsqueda finalizó o fue interrumpida.',
+        status: errorMsg,
         step: 'ERROR',
       }));
       eventSource.close();

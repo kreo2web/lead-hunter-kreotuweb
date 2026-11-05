@@ -122,11 +122,21 @@ router.get('/stream', async (req: Request, res: Response) => {
   const searchQuery = (req.query.query as string) || '';
   const limit = parseInt((req.query.limit as string) || '10', 10);
   const session = getUserFromReq(req);
-  const userId = session?.userId || (req.query.userId as string) || null;
+  let userId = session?.userId || (req.query.userId as string) || null;
 
   if (!searchQuery.trim()) {
     res.status(400).json({ error: 'El parámetro "query" es requerido.' });
     return;
+  }
+
+  // Fallback to active admin ID if session token expired or unauthenticated
+  if (!userId) {
+    try {
+      const admin = await get<{ id: string }>('SELECT id FROM users WHERE role = ? LIMIT 1', ['admin']);
+      userId = admin?.id || 'admin-001';
+    } catch {
+      userId = 'admin-001';
+    }
   }
 
   // Setup Server-Sent Events headers
@@ -135,8 +145,18 @@ router.get('/stream', async (req: Request, res: Response) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
+  let isClientConnected = true;
+  req.on('close', () => {
+    isClientConnected = false;
+  });
+
   const sendEvent = (event: string, data: any) => {
-    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    if (!isClientConnected) return;
+    try {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    } catch (err: any) {
+      console.warn('Error sending SSE event:', err.message);
+    }
   };
 
   try {
@@ -152,6 +172,7 @@ router.get('/stream', async (req: Request, res: Response) => {
     sendEvent('complete', { total: scraped.length });
     res.end();
   } catch (error: any) {
+    console.error('Error in /api/search/stream:', error.message);
     sendEvent('error', { message: error.message || 'Error en el proceso de búsqueda' });
     res.end();
   }

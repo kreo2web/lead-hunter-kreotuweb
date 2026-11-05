@@ -32,15 +32,16 @@ function getUserScope(req: Request): { sqlClause: string; params: any[] } {
         params: [],
       };
     } else {
-      // Admin default: view own private leads
+      // Admin default: view own private leads (or admin-001)
       return {
-        sqlClause: ' AND userId = ?',
+        sqlClause: ' AND (userId = ? OR userId = \'admin-001\')',
         params: [session.userId],
       };
     }
   }
 
-  // Fallback for unauthenticated
+  // Fallback for unauthenticated or single-tenant default:
+  // If no user session is present, allow viewing admin-001 leads
   return {
     sqlClause: " AND userId = 'admin-001'",
     params: [],

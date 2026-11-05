@@ -342,6 +342,15 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
           </span>
         </div>
       )}
+
+      {searchProgress.step === 'ERROR' && !isSearching && (
+        <div className="mt-4 p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between text-xs text-rose-800">
+          <span className="flex items-center gap-2 font-medium">
+            <X className="w-4 h-4 text-rose-600" />
+            {searchProgress.status || 'Ocurrió un error o se interrumpió la búsqueda.'}
+          </span>
+        </div>
+      )}
     </div>
   );
 };
