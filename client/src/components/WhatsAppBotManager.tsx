@@ -823,9 +823,14 @@ export const WhatsAppBotManager: React.FC<WhatsAppBotManagerProps> = ({
 
               {/* Business Description & Instructions */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Información y Servicios de Tu Negocio (Contexto para la IA)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Información y Servicios de Tu Negocio (Contexto para la IA)
+                  </label>
+                  <span className="text-[10px] text-emerald-700 font-medium bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    🔒 Contención de precios y cualificación activa
+                  </span>
+                </div>
                 <textarea
                   rows={4}
                   value={botInstructions}
@@ -833,6 +838,9 @@ export const WhatsAppBotManager: React.FC<WhatsAppBotManagerProps> = ({
                   placeholder="Describe qué hace tu empresa, tus servicios principales, tiempos de entrega, ofertas y el objetivo de la conversación (ej: invitar a agendar videollamada o solicitar correo para enviar propuesta)."
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-normal focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 leading-relaxed"
                 />
+                <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                  💡 <strong>Tip de ventas:</strong> Puedes incluir aquí todos tus planes y precios con total tranquilidad. El agente está programado para <strong>no soltar precios al inicio</strong>; primero hará una pregunta de cualificación para conocer la necesidad real del cliente y solo presentará los planes cuando determine que es un cliente potencial.
+                </p>
               </div>
 
               {/* FAQs section */}
