@@ -3,7 +3,7 @@ import { Search, Loader2, MapPin, Briefcase, Zap, Sparkles, TrendingUp, Check, C
 
 interface SearchPanelProps {
   isSearching: boolean;
-  onStartSearch: (query: string, limit: number) => void;
+  onStartSearch: (query: string, limit: number, locationDetails?: { city: string; state: string; country: string }) => void;
   searchProgress: {
     status: string;
     step: 'SEARCHING' | 'EXTRACTING' | 'ENRICHING' | 'COMPLETED' | 'ERROR' | 'IDLE';
@@ -62,6 +62,18 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
     });
   };
 
+  // Parse location into city, state, country helper
+  const parseLocation = (locStr: string) => {
+    const parts = locStr.split(',').map((p) => p.trim()).filter(Boolean);
+    if (parts.length === 1) return { city: parts[0], state: '', country: '' };
+    if (parts.length === 2) return { city: parts[0], state: '', country: parts[1] };
+    return {
+      city: parts[0],
+      state: parts.slice(1, -1).join(', '),
+      country: parts[parts.length - 1],
+    };
+  };
+
   const handleSelectRecommendation = (item: NicheRecommendation, autoStart: boolean = false) => {
     if (isSearching) return;
     setNiche(item.category);
@@ -69,7 +81,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
     if (autoStart && location.trim()) {
       setSearchedCategories(prev => prev.includes(item.category) ? prev : [...prev, item.category]);
       const fullQuery = `${item.category.trim()} en ${location.trim()}`;
-      onStartSearch(fullQuery, limit);
+      onStartSearch(fullQuery, limit, parseLocation(location.trim()));
     }
   };
 
@@ -84,10 +96,14 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
     setShowRecommendations(true);
 
     try {
+      const locDetails = parseLocation(location.trim());
       const res = await fetch('/api/search/recommend-categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ city: location.trim() }),
+        body: JSON.stringify({
+          city: locDetails.city,
+          country: [locDetails.state, locDetails.country].filter(Boolean).join(', '),
+        }),
       });
       const data = await res.json();
 
@@ -108,7 +124,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
     if (!niche.trim() || !location.trim()) return;
     setSearchedCategories(prev => prev.includes(niche.trim()) ? prev : [...prev, niche.trim()]);
     const fullQuery = `${niche.trim()} en ${location.trim()}`;
-    onStartSearch(fullQuery, limit);
+    onStartSearch(fullQuery, limit, parseLocation(location.trim()));
   };
 
   const calculatePercent = () => {
@@ -191,7 +207,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
           {/* Localidad */}
           <div className="sm:col-span-4 relative">
             <label className="block text-xs font-semibold text-slate-600 mb-1">
-              Ciudad, Zona o País
+              Ciudad/Municipio, Estado, País
             </label>
             <div className="relative">
               <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -199,7 +215,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                 type="text"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                placeholder="Ej. Madrid, Ciudad de México, Bogotá..."
+                placeholder="Ej. Progreso, Yucatán, México"
                 disabled={isSearching}
                 required
                 className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"

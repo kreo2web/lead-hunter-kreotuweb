@@ -50,16 +50,17 @@ router.post('/recommend-categories', async (req: Request, res: Response) => {
     const densityData = await probeCategoryDensity(locationString, probeCandidates);
 
     // Step 2: Use configured AI (Gemini, Groq, etc.) to analyze findings and rank them
-    let aiPrompt = `Analiza la ciudad "${locationString}" y estos resultados preliminares de presencia comercial en Google Maps:\n\n`;
+    let aiPrompt = `Analiza la ciudad o municipio "${locationString}" y estos resultados preliminares de presencia comercial en Google Maps:\n\n`;
     densityData.forEach((d) => {
       aiPrompt += `- ${d.category}: Densidad detectada: ${d.densityLevel} (Muestra inicial: ~${d.estimatedCount} lugares).\n`;
     });
-    aiPrompt += `\nGenera un JSON con una lista recomendada de 6 a 8 rubros ideales para prospección comercial B2B (venta de sitios web, marketing y presencia digital) en ${locationString}.`;
+    aiPrompt += `\nGenera un JSON con una lista recomendada de 6 a 8 rubros ideales para prospección comercial B2B (venta de sitios web, marketing y presencia digital) estrictamente centrados en ${locationString}.`;
+    aiPrompt += `\nIMPORTANTE: No sustituyas ni cambies ${locationString} por otra ciudad grande o capital cercana. Todo debe ser para ${locationString}.`;
     aiPrompt += `\nPara cada rubro incluye:
 - "category": nombre del rubro en español (ej. "Clínicas Dentales")
-- "reason": breve justificación comercial de por qué conviene venderles servicios web en esa ciudad (máximo 15 palabras)
+- "reason": breve justificación comercial de por qué conviene venderles servicios web en esa localidad (máximo 15 palabras)
 - "opportunityLevel": "ALTA", "MEDIA" o "BAJA"
-- "suggestedSearch": texto exacto sugerido para buscar en Google Maps (ej. "Clínicas Dentales en ${cleanCity}")
+- "suggestedSearch": texto exacto sugerido para buscar en Google Maps (debe ser obligatoriamente: "[Rubro] en ${locationString}")
 - "estimatedDensity": "ALTA", "MEDIA" o "BAJA"
 
 Devuelve ÚNICAMENTE un array JSON válido sin texto adicional ni bloques markdown. Ejemplo: [{"category": "...", "reason": "...", "opportunityLevel": "ALTA", "suggestedSearch": "...", "estimatedDensity": "ALTA"}]`;
@@ -99,7 +100,7 @@ Devuelve ÚNICAMENTE un array JSON válido sin texto adicional ni bloques markdo
           ? 'Alta concentración de negocios locales con fuerte necesidad de digitalización.' 
           : 'Nicho comercial con menor saturación y excelente oportunidad de cierre.',
         opportunityLevel: d.densityLevel === 'ALTA' ? 'ALTA' : 'MEDIA',
-        suggestedSearch: `${d.category} en ${cleanCity}`,
+        suggestedSearch: `${d.category} en ${locationString}`,
         estimatedDensity: d.densityLevel,
       }));
     }
@@ -121,6 +122,10 @@ Devuelve ÚNICAMENTE un array JSON válido sin texto adicional ni bloques markdo
 router.get('/stream', async (req: Request, res: Response) => {
   const searchQuery = (req.query.query as string) || '';
   const limit = parseInt((req.query.limit as string) || '10', 10);
+  const city = (req.query.city as string) || '';
+  const state = (req.query.state as string) || '';
+  const country = (req.query.country as string) || '';
+
   const session = getUserFromReq(req);
   let userId = session?.userId || (req.query.userId as string) || null;
 
@@ -160,18 +165,28 @@ router.get('/stream', async (req: Request, res: Response) => {
   };
 
   try {
-    const scraped = await scrapeGoogleMaps(searchQuery, limit, async (progress) => {
-      sendEvent('progress', progress);
+    const scraped = await scrapeGoogleMaps(
+      searchQuery,
+      limit,
+      async (progress) => {
+        sendEvent('progress', progress);
 
-      // If a single lead was just extracted and enriched, save to database immediately with searchQuery & userId
-      if (progress.lead) {
-        try {
-          await saveOrUpdateLead(progress.lead, searchQuery, userId);
-        } catch (saveErr: any) {
-          console.error(`❌ Error saving lead "${progress.lead.name}" to database:`, saveErr.message);
+        // If a single lead was just extracted and enriched, save to database immediately with searchQuery & userId
+        if (progress.lead) {
+          try {
+            await saveOrUpdateLead(progress.lead, searchQuery, userId);
+          } catch (saveErr: any) {
+            console.error(`❌ Error saving lead "${progress.lead.name}" to database:`, saveErr.message);
+          }
         }
+      },
+      {
+        city: city || undefined,
+        state: state || undefined,
+        country: country || undefined,
+        strictLocation: true,
       }
-    });
+    );
 
     sendEvent('complete', { total: scraped.length, searchQuery });
     res.end();

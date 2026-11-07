@@ -304,7 +304,11 @@ export const App: React.FC = () => {
   };
 
   // Live scraping with Server-Sent Events
-  const handleStartSearch = (query: string, limit: number) => {
+  const handleStartSearch = (
+    query: string,
+    limit: number,
+    locationDetails?: { city: string; state: string; country: string }
+  ) => {
     // Reset filters to ensure newly found leads are immediately visible in the table
     setSearchQueryFilter('ALL');
     setSearchTerm('');
@@ -320,9 +324,16 @@ export const App: React.FC = () => {
     });
 
     const token = authToken || localStorage.getItem('lead_hunter_token') || '';
-    const eventSource = new EventSource(
-      `/api/search/stream?query=${encodeURIComponent(query)}&limit=${limit}&token=${encodeURIComponent(token)}`
-    );
+    const params = new URLSearchParams({
+      query,
+      limit: limit.toString(),
+      token,
+    });
+    if (locationDetails?.city) params.append('city', locationDetails.city);
+    if (locationDetails?.state) params.append('state', locationDetails.state);
+    if (locationDetails?.country) params.append('country', locationDetails.country);
+
+    const eventSource = new EventSource(`/api/search/stream?${params.toString()}`);
 
     eventSource.addEventListener('progress', (e: MessageEvent) => {
       try {
