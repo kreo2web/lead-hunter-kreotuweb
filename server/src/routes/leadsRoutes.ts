@@ -32,18 +32,18 @@ function getUserScope(req: Request): { sqlClause: string; params: any[] } {
         params: [],
       };
     } else {
-      // Admin default: view own private leads (or admin-001)
+      // Admin default: view own private leads (or admin-001 or any leads belonging to admin role)
       return {
-        sqlClause: ' AND (userId = ? OR userId = \'admin-001\')',
+        sqlClause: " AND (userId = ? OR userId = 'admin-001' OR userId IN (SELECT id FROM users WHERE role = 'admin'))",
         params: [session.userId],
       };
     }
   }
 
-  // Fallback for unauthenticated or single-tenant default:
-  // If no user session is present, allow viewing admin-001 leads
+  // Fallback for unauthenticated or single-tenant default / expired session:
+  // Show admin leads so prospects are never hidden by an unauthenticated state
   return {
-    sqlClause: " AND userId = 'admin-001'",
+    sqlClause: " AND (userId = 'admin-001' OR userId IN (SELECT id FROM users WHERE role = 'admin'))",
     params: [],
   };
 }

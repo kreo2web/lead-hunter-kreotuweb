@@ -165,11 +165,15 @@ router.get('/stream', async (req: Request, res: Response) => {
 
       // If a single lead was just extracted and enriched, save to database immediately with searchQuery & userId
       if (progress.lead) {
-        await saveOrUpdateLead(progress.lead, searchQuery, userId);
+        try {
+          await saveOrUpdateLead(progress.lead, searchQuery, userId);
+        } catch (saveErr: any) {
+          console.error(`❌ Error saving lead "${progress.lead.name}" to database:`, saveErr.message);
+        }
       }
     });
 
-    sendEvent('complete', { total: scraped.length });
+    sendEvent('complete', { total: scraped.length, searchQuery });
     res.end();
   } catch (error: any) {
     console.error('Error in /api/search/stream:', error.message);

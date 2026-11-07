@@ -175,20 +175,32 @@ export const App: React.FC = () => {
     };
   };
 
-  const fetchLeads = async () => {
+  const fetchLeads = async (overrides?: {
+    ranking?: string;
+    status?: string;
+    searchQuery?: string;
+    searchTerm?: string;
+    userId?: string;
+  }) => {
     try {
+      const activeRanking = overrides?.ranking !== undefined ? overrides.ranking : rankingFilter;
+      const activeStatus = overrides?.status !== undefined ? overrides.status : statusFilter;
+      const activeSearchQuery = overrides?.searchQuery !== undefined ? overrides.searchQuery : searchQueryFilter;
+      const activeSearchTerm = overrides?.searchTerm !== undefined ? overrides.searchTerm : searchTerm;
+      const activeUserId = overrides?.userId !== undefined ? overrides.userId : selectedUserFilter;
+
       const params = new URLSearchParams();
-      if (rankingFilter !== 'ALL') params.append('ranking', rankingFilter);
-      if (statusFilter !== 'ALL') params.append('status', statusFilter);
-      if (searchQueryFilter !== 'ALL') params.append('searchQuery', searchQueryFilter);
+      if (activeRanking !== 'ALL') params.append('ranking', activeRanking);
+      if (activeStatus !== 'ALL') params.append('status', activeStatus);
+      if (activeSearchQuery !== 'ALL') params.append('searchQuery', activeSearchQuery);
       if (onlyWithPhone) params.append('hasPhone', 'true');
       if (onlyWithEmail) params.append('hasEmail', 'true');
       if (onlyWithoutWeb) params.append('hasWebsite', 'false');
-      if (searchTerm.trim()) params.append('search', searchTerm.trim());
+      if (activeSearchTerm.trim()) params.append('search', activeSearchTerm.trim());
 
       // If admin and a specific user filter is chosen
-      if (currentUser?.role === 'admin' && selectedUserFilter) {
-        params.append('userId', selectedUserFilter);
+      if (currentUser?.role === 'admin' && activeUserId) {
+        params.append('userId', activeUserId);
       }
 
       const res = await fetch(`/api/leads?${params.toString()}`, {
@@ -346,7 +358,8 @@ export const App: React.FC = () => {
         step: 'COMPLETED',
       }));
       eventSource.close();
-      fetchLeads();
+      // Explicitly override filters with ALL and empty to prevent stale React closure filtering out results
+      fetchLeads({ ranking: 'ALL', status: 'ALL', searchQuery: 'ALL', searchTerm: '' });
       fetchStats();
       fetchSearchQueries();
     });
@@ -367,7 +380,7 @@ export const App: React.FC = () => {
         step: 'ERROR',
       }));
       eventSource.close();
-      fetchLeads();
+      fetchLeads({ ranking: 'ALL', status: 'ALL', searchQuery: 'ALL', searchTerm: '' });
       fetchStats();
       fetchSearchQueries();
     });
