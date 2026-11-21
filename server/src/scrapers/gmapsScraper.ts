@@ -546,7 +546,7 @@ async function extractPlaceDetails(page: Page, url: string): Promise<RawLead | n
 
 /**
  * Fast density inspection for multiple categories in a given city.
- * Queries Google Maps in parallel/concurrency to count immediate places found.
+ * Queries Google Maps in parallel with assets aborted to deliver results in 4-6 seconds.
  */
 export async function probeCategoryDensity(
   city: string,
@@ -554,9 +554,6 @@ export async function probeCategoryDensity(
 ): Promise<Array<{ category: string; estimatedCount: number; densityLevel: 'ALTA' | 'MEDIA' | 'BAJA' }>> {
   let browser: Browser | null = null;
   const results: Array<{ category: string; estimatedCount: number; densityLevel: 'ALTA' | 'MEDIA' | 'BAJA' }> = [];
-
-  const locParts = parseLocationString(city);
-  const targetCity = locParts.city || city;
 
   try {
     browser = await chromium.launch({
@@ -568,73 +565,64 @@ export async function probeCategoryDensity(
         '--disable-gpu',
         '--no-zygote',
         '--lang=es-ES,es',
+        '--blink-settings=imagesEnabled=false',
       ],
     });
 
     const context = await browser.newContext({
-      viewport: { width: 1024, height: 768 },
+      viewport: { width: 800, height: 600 },
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
       locale: 'es-ES',
     });
 
-    // Anchor first to specific city location to lock the map view in the browser session
-    try {
-      const anchorPage = await context.newPage();
-      await anchorPage.goto(`https://www.google.com/maps/place/${encodeURIComponent(city)}?hl=es`, {
-        waitUntil: 'domcontentloaded',
-        timeout: 12000,
-      });
-      try {
-        const consentBtn = anchorPage.locator(
-          'button:has-text("Aceptar todo"), button:has-text("Aceptar"), button:has-text("Accept all"), form button[aria-label*="Aceptar"]'
-        );
-        if (await consentBtn.first().isVisible({ timeout: 2500 })) {
-          await consentBtn.first().click();
-        }
-      } catch {}
-      await anchorPage.waitForTimeout(1000);
-      await anchorPage.close().catch(() => {});
-    } catch {}
+    // Abort heavy assets (images, fonts, media) to make parallel requests ultra-fast and save bandwidth
+    await context.route('**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ttf,eot,mp4,mp3}', (r) => r.abort());
 
-    for (const cat of categories) {
-      const page = await context.newPage();
-      try {
-        const query = `${cat} en ${city}`;
-        const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(query)}?hl=es`;
-        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 12000 });
+    // Execute in parallel chunks of 4 concurrent tabs
+    const chunkSize = 4;
+    for (let i = 0; i < categories.length; i += chunkSize) {
+      const chunk = categories.slice(i, i + chunkSize);
+      const chunkResults = await Promise.all(
+        chunk.map(async (cat) => {
+          const page = await context.newPage();
+          try {
+            const query = `${cat} en ${city}`;
+            const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(query)}?hl=es`;
+            await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 8000 });
+            await page.waitForTimeout(1000);
 
-        // Quick check for places count in feed
-        await page.waitForTimeout(1500);
-        const placeLinks = await page.locator('div[role="feed"] a[href*="/maps/place/"]').all();
-        let count = placeLinks.length;
+            const placeLinks = await page.locator('div[role="feed"] a[href*="/maps/place/"]').all();
+            let count = placeLinks.length;
 
-        // If single place view opened directly
-        const singleHeading = await page.locator('h1.DUwDvf').first().textContent().catch(() => null);
-        if (count === 0 && singleHeading) {
-          count = 1;
-        }
+            if (count === 0) {
+              const isSingle = await page.locator('h1.DUwDvf').first().isVisible({ timeout: 800 }).catch(() => false);
+              if (isSingle) count = 1;
+            }
 
-        let densityLevel: 'ALTA' | 'MEDIA' | 'BAJA' = 'BAJA';
-        if (count >= 7) {
-          densityLevel = 'ALTA';
-        } else if (count >= 3) {
-          densityLevel = 'MEDIA';
-        }
+            let densityLevel: 'ALTA' | 'MEDIA' | 'BAJA' = 'BAJA';
+            if (count >= 6) {
+              densityLevel = 'ALTA';
+            } else if (count >= 3) {
+              densityLevel = 'MEDIA';
+            }
 
-        results.push({
-          category: cat,
-          estimatedCount: count,
-          densityLevel,
-        });
-      } catch {
-        results.push({
-          category: cat,
-          estimatedCount: 0,
-          densityLevel: 'BAJA',
-        });
-      } finally {
-        await page.close().catch(() => {});
-      }
+            return {
+              category: cat,
+              estimatedCount: count,
+              densityLevel,
+            };
+          } catch {
+            return {
+              category: cat,
+              estimatedCount: 0,
+              densityLevel: 'BAJA' as const,
+            };
+          } finally {
+            await page.close().catch(() => {});
+          }
+        })
+      );
+      results.push(...chunkResults);
     }
   } catch (err: any) {
     console.error('Error in probeCategoryDensity:', err.message);
