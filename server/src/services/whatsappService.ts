@@ -4,6 +4,7 @@ import {
   useMultiFileAuthState,
   WASocket,
   proto,
+  Browsers,
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import path from 'path';
@@ -89,7 +90,11 @@ export async function connectWaForUser(userId: string): Promise<{ success: boole
       auth: authState,
       printQRInTerminal: false,
       logger,
-      browser: ['Lead Hunter CRM', 'Chrome', '1.0.0'],
+      browser: Browsers.ubuntu('Chrome'),
+      syncFullHistory: false,
+      connectTimeoutMs: 60000,
+      keepAliveIntervalMs: 25000,
+      retryRequestDelayMs: 2000,
     });
 
     state.socket = sock;
@@ -155,6 +160,7 @@ export async function connectWaForUser(userId: string): Promise<{ success: boole
         state!.isConnected = true;
         state!.isConnecting = false;
         state!.qrDataUrl = null;
+        state!.lastError = null;
         state!.reconnectAttempts = 0; // Reset counter on successful connection
         if (state!.reconnectTimer) {
           clearTimeout(state!.reconnectTimer);

@@ -467,6 +467,15 @@ export const WhatsAppBotManager: React.FC<WhatsAppBotManagerProps> = ({
                           Haz clic en conectar para generar el código QR de vinculación instantánea.
                         </p>
                       </div>
+                      {waStatus.lastError && (
+                        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 text-left">
+                          <p className="font-semibold flex items-center gap-1.5 mb-0.5">
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                            Aviso de conexión:
+                          </p>
+                          <p className="text-[11px] text-rose-600 leading-relaxed">{waStatus.lastError}</p>
+                        </div>
+                      )}
                       <button
                         onClick={handleConnect}
                         disabled={isLoadingStatus}

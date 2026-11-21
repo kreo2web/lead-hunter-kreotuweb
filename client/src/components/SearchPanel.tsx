@@ -48,17 +48,50 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
   const [recommendations, setRecommendations] = useState<NicheRecommendation[]>([]);
   const [showRecommendations, setShowRecommendations] = useState(false);
   const [recommendationError, setRecommendationError] = useState<string | null>(null);
-  const [searchedCategories, setSearchedCategories] = useState<string[]>([]);
+  // State to track searches executed in current user session: pairs of { category, location }
+  const [searchedCategoryLocations, setSearchedCategoryLocations] = useState<Array<{ category: string; location: string }>>([]);
 
-  // Check if a category has been prospected already (either in this session or in existing database queries)
+  // Normalizes strings for robust geographical and category comparison (removes accents, punctuation)
+  const normalizeText = (text: string | null | undefined): string => {
+    if (!text) return '';
+    return text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  // Check if a category has been prospected already IN THE SPECIFIC CURRENT LOCATION/CITY
   const isCategoryProspected = (cat: string) => {
-    const cleanCat = cat.trim().toLowerCase();
-    // 1. Checked in local session
-    if (searchedCategories.some(c => c.toLowerCase() === cleanCat)) return true;
-    // 2. Checked against historical search queries in database
-    return searchQueriesList.some(q => {
-      const qLower = q.toLowerCase();
-      return qLower.includes(cleanCat);
+    const normCat = normalizeText(cat);
+    const locParts = parseLocation(location.trim());
+    const targetCity = normalizeText(locParts.city || location.trim());
+
+    if (!normCat) return false;
+
+    // 1. Checked in local session for this specific location
+    const matchedInSession = searchedCategoryLocations.some((item) => {
+      const itemCat = normalizeText(item.category);
+      const itemLoc = normalizeText(item.location);
+      if (!itemCat.includes(normCat) && !normCat.includes(itemCat)) return false;
+      if (targetCity) {
+        return itemLoc.includes(targetCity) || targetCity.includes(itemLoc);
+      }
+      return true;
+    });
+    if (matchedInSession) return true;
+
+    // 2. Checked against historical search queries in database for this specific city
+    // Example query in DB: "Restaurante en Mérida, Yucatán, Mexico"
+    return searchQueriesList.some((q) => {
+      const qNorm = normalizeText(q);
+      if (!qNorm.includes(normCat)) return false;
+      if (targetCity) {
+        return qNorm.includes(targetCity);
+      }
+      return true;
     });
   };
 
@@ -79,7 +112,10 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
     setNiche(item.category);
     // Keep recommendations card open so user can continue picking other cards
     if (autoStart && location.trim()) {
-      setSearchedCategories(prev => prev.includes(item.category) ? prev : [...prev, item.category]);
+      setSearchedCategoryLocations((prev) => [
+        ...prev,
+        { category: item.category.trim(), location: location.trim() },
+      ]);
       const fullQuery = `${item.category.trim()} en ${location.trim()}`;
       onStartSearch(fullQuery, limit, parseLocation(location.trim()));
     }
@@ -122,7 +158,10 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!niche.trim() || !location.trim()) return;
-    setSearchedCategories(prev => prev.includes(niche.trim()) ? prev : [...prev, niche.trim()]);
+    setSearchedCategoryLocations((prev) => [
+      ...prev,
+      { category: niche.trim(), location: location.trim() },
+    ]);
     const fullQuery = `${niche.trim()} en ${location.trim()}`;
     onStartSearch(fullQuery, limit, parseLocation(location.trim()));
   };
